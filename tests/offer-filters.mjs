@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {filterOffers,emptyOfferFilters} from '../app/offer-filters.ts';
+import {schemas} from '../app/validation.ts';
+const offers=[{title:'Колодки',host:'shop-a',price:1000,currency:'UAH'},{title:'Колодки',host:'shop-b',price:20,currency:'EUR'},{title:'Диск',host:'shop-a',price:500,currency:'UAH'},{title:'Диск без ціни',host:'shop-a',currency:'UAH'}];
+assert.deepEqual(filterOffers(offers,{...emptyOfferFilters,sort:'ascending'}),offers,'Do not sort unlike currencies together');
+assert.deepEqual(filterOffers(offers,{...emptyOfferFilters,currency:'UAH',min:'600'}),[offers[0]],'Range excludes missing prices and other currencies');
+assert.deepEqual(filterOffers(offers,{...emptyOfferFilters,currency:'UAH',sort:'ascending'}),[offers[2],offers[0],offers[3]]);
+assert.deepEqual(filterOffers(offers,{...emptyOfferFilters,text:'КОЛОДКИ',seller:'shop-b'}),[offers[1]]);
+assert.equal(filterOffers(offers,{...emptyOfferFilters,currency:'UAH',min:'2000',max:'100'}).length,0);
+assert(schemas.webFavorite.safeParse({title:'Диск',url:'https://example.com/part',vehicle:'Test vehicle'}).success,'Old favorites remain valid');
+const favorite={title:'Диск',url:'https://example.com/part',vehicle:'Test vehicle',host:'example.com',price:500,currency:'UAH',checkedAt:'2026-10-01T10:00:00Z'};
+assert.deepEqual(schemas.webFavorite.parse(favorite),favorite,'Saved price metadata survives server validation');
+assert(!schemas.webFavorite.safeParse({...favorite,price:-1}).success);
+assert(!schemas.webFavorite.safeParse({...favorite,url:'javascript:alert(1)'}).success);
+console.log('PASS: offer filters, currency separation and backward-compatible favorite validation');

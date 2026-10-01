@@ -1,0 +1,3 @@
+import { sqliteTable,text,integer,index } from 'drizzle-orm/sqlite-core';
+export const records=sqliteTable('records',{id:text('id').primaryKey(),owner:text('owner').notNull(),kind:text('kind').notNull(),payload:text('payload').notNull(),created:integer('created').notNull()},t=>[index('idx_records_owner_kind').on(t.owner,t.kind)]);
+export const documents=sqliteTable('documents',{id:text('id').primaryKey(),owner:text('owner').notNull(),name:text('name').notNull(),mime:text('mime').notNull(),size:integer('size').notNull(),created:integer('created').notNull()},t=>[index('idx_documents_owner').on(t.owner)]);

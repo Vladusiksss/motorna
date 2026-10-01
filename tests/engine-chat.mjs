@@ -1,0 +1,5 @@
+import assert from 'node:assert/strict';
+import {buildAnalysis} from '../app/diagnostic-guide.ts';
+assert.ok(buildAnalysis('стукає двигун','Audi',[]).causes.length>=3);
+assert.equal(buildAnalysis('двигун не стукає','Audi',[]).causes.length,0);
+const history=[];for(const answer of [null,'через що може стукати двигун']){if(answer)history.push({role:'user',content:answer});const r=await fetch('http://localhost:5173/api/analyze',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({vehicle:'Audi A6 дизель',symptoms:'стукає двигун',history})});const d=await r.json();assert.equal(r.status,200);assert.ok(d.causes.length>=3);assert.ok(d.note.includes('змащення'));assert.ok(d.questions.length<=1);if(answer)assert.equal(d.questions.length,0);history.push({role:'assistant',content:[d.note,...d.questions].join('\n').slice(0,1500)});console.log(JSON.stringify({causes:d.causes.length,questions:d.questions}));}console.log('PASS: direct engine-knock answers, no repeated clarification');

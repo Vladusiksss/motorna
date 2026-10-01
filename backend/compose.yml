@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: motorna
+      POSTGRES_USER: motorna
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes: ["mvs-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U motorna"]
+      interval: 5s
+      retries: 12
+  api:
+    build: .
+    ports: ["127.0.0.1:8008:8008"]
+    environment:
+      DATABASE_URL: postgresql://motorna:${POSTGRES_PASSWORD}@postgres/motorna
+      MVS_API_TOKEN: ${MVS_API_TOKEN:?Set MVS_API_TOKEN}
+      MVS_AUTO_UPDATE: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+volumes:
+  mvs-data:

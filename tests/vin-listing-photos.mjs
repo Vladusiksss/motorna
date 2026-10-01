@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {registerHooks} from 'node:module';
+registerHooks({resolve(s,c,next){try{return next(s,c);}catch(e){if(s.startsWith('.')&&!s.endsWith('.ts'))return next(s+'.ts',c);throw e;}}});
+const {extractListingPhotos,allowedListing}=await import('../app/vin-listing-photos.ts');
+const vin='WAUZZZ4G0EN000001',url='https://auto.ria.com/uk/auto_audi_a6_12345678.html';
+const html=(v,img='https://cdn.riastatic.com/photos/auto/photo/audi__123.jpg')=>'<script type="application/ld+json">'+JSON.stringify({'@type':'Car',vehicleIdentificationNumber:v,name:'Audi A6',image:[img]})+'</script>';
+assert.equal(extractListingPhotos(html(vin),url,vin).length,1);
+assert.equal(extractListingPhotos(html('WAUZZZ4G0EN000002')+'<p>'+vin+'</p>',url,vin).length,0);
+assert.equal(extractListingPhotos(html(vin,'http://localhost/private'),url,vin).length,0);
+assert.equal(extractListingPhotos('<p>'+vin+'</p><meta property="og:image" content="https://cdn.riastatic.com/car.jpg">',url,vin).length,0);
+assert.equal(extractListingPhotos('<h1>Audi '+vin+'</h1><meta property="og:image" content="https://cdn.riastatic.com/car.jpg">',url,vin).length,1);
+assert.equal(allowedListing('https://auto.ria.com.evil.test/a'),false);
+assert.equal(allowedListing('https://127.0.0.1/a'),false);
+console.log('PASS: exact VIN, wrong VIN, unrelated VIN text, primary photo, safe hosts');

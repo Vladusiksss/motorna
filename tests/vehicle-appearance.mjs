@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {vehicleAppearance} from '../app/vehicle-appearance.ts';
+const fields=(body,color)=>[{label:'Кузов',value:body},{label:'Колір',value:color}];
+assert.equal(vehicleAppearance(fields('СЕДАН','ЧОРНИЙ')).color,'#20232a');
+assert.equal(vehicleAppearance(fields('СЕДАН','ЧОРНИЙ')).body,'sedan');
+assert.equal(vehicleAppearance(fields('ПОЗАШЛЯХОВИК','СИНІЙ')).body,'suv');
+assert.equal(vehicleAppearance(fields('Sport Utility Vehicle (SUV)','BLUE')).color,'#195cb2');
+assert.equal(vehicleAppearance(fields('УНІВЕРСАЛ','СІРИЙ')).body,'wagon');
+assert.equal(vehicleAppearance([]).knownColor,false);
+assert.equal(vehicleAppearance(fields('ЛЕГКОВИЙ','НЕВІДОМИЙ')).knownBody,false);
+console.log('PASS: body, color, SUV, sedan, wagon, unknown data');

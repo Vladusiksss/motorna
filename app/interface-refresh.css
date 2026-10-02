@@ -16,3 +16,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 @media print{.topbar,.desktop-sidebar,.mobile-dock,footer,button{display:none!important}.workspace-main{margin:0!important;width:100%!important;padding:0!important}.panel,.saved-car{break-inside:avoid}}
 
 #vehicle-next-step{scroll-margin-top:100px}#vehicle-next-step:focus{outline:2px solid #93c5fd;outline-offset:4px}
+
+.oem-free label { display:grid; gap:8px; margin:16px 0; }
+.oem-free input,.oem-free textarea { width:100%; padding:12px; border:1px solid #cedbe8; border-radius:12px; background:var(--background,#fff); color:inherit; }
+.oem-options { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; margin:20px 0; }
+.oem-options article { padding:18px; border:1px solid #dce6f0; border-radius:16px; }
+.oem-actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-top:14px; }
+.oem-free details { margin:16px 0; }
+.oem-free summary { cursor:pointer; padding:10px 0; }
+.oem-free code { overflow-wrap:anywhere; }

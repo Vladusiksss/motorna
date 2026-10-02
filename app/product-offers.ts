@@ -1,5 +1,5 @@
 import {decodeEntities,parseWebResults} from './vehicle-search';
-export type ProductOffer={title:string;url:string;host:string;price:number;currency:string;checkedAt:string;availability:string;part:string;catalogNumbers?:string[]};
+export type ProductOffer={title:string;url:string;host:string;price:number;currency:string;checkedAt:string;availability:string;part:string;catalogNumbers?:string[];brand?:string};
 const sellers=['vag115.com.ua','autopartner.in.ua','renix.ua','evocar.ua','avto.pro','exist.ua','dok.ua','autodoc.ua','autoklad.ua','ukrparts.com.ua','avtochast.com.ua','atl.ua','rozetka.com.ua','prom.ua','epicentrk.ua','autodoc.co.uk'];
 export function allowedSeller(value:string){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&(!u.port||u.port==='443')&&sellers.some(h=>u.hostname===h||u.hostname.endsWith('.'+h));}catch{return false;}}
 function normalize(v:string){return v.toLowerCase().replace(/ё/g,'е').replace(/стійк|стойк|тяга|тяги/g,'linkrod').replace(/стабіліз|стабилиз/g,'stabiliz').replace(/гальмівн|тормозн/g,'brake').replace(/колодк/g,'pad').replace(/амортизатор/g,'shock').replace(/[^\p{L}\p{N}]+/gu,' ').trim();}
@@ -12,7 +12,7 @@ export function extractOffers(html:string,url:string,part:string,oem=''):Product
   for(const product of roots){
    if(![product['@type']].flat().includes('Product')||typeof product.name!=='string')continue;
    const catalogNumbers=[product.sku,product.mpn,...(Array.isArray(product.additionalProperty)?product.additionalProperty.filter((p:any)=>/oem|oe number|артикул|каталож/i.test(p.name||'')).map((p:any)=>p.value):[])].filter((v:any)=>typeof v==='string');
-   const numberOnly=!!oem&&part===oem&&matchesCatalogNumber({title:product.name,catalogNumbers},oem);
+   const numberOnly=!!oem&&matchesCatalogNumber({title:product.name,catalogNumbers,brand:typeof product.brand==='string'?product.brand:product.brand?.name},oem);
    if(!matchesPart(product.name,part)&&!numberOnly)continue;
    for(const offer of [product.offers].flat().filter(Boolean)){
     if(offer['@type']==='AggregateOffer'||offer.lowPrice||offer.highPrice)continue;
@@ -20,12 +20,12 @@ export function extractOffers(html:string,url:string,part:string,oem=''):Product
     const currency=String(offer.priceCurrency||offer.priceSpecification?.priceCurrency||'').toUpperCase();
     if(!Number.isFinite(price)||price<=0||price>10000000||!['UAH','EUR','USD','GBP'].includes(currency))continue;
     const target=offer.url||product.url?new URL(offer.url||product.url,url).href:url;if(!allowedSeller(target)||new URL(target).hostname!==new URL(url).hostname)continue;
-    offers.push({title:decodeEntities(product.name).slice(0,500),url:target,host:new URL(target).hostname,price,currency,availability:/OutOfStock|Discontinued|SoldOut/.test(offer.availability||'')?'Немає в наявності':/InStock/.test(offer.availability||'')?'Є в наявності':'Наявність уточнюйте',checkedAt:new Date().toISOString(),part,catalogNumbers:[product.sku,product.mpn,...(Array.isArray(product.additionalProperty)?product.additionalProperty.filter((p:any)=>/oem|oe number|артикул|каталож/i.test(p.name||'')).map((p:any)=>p.value):[])].filter((v:any)=>typeof v==='string')});
+    offers.push({title:decodeEntities(product.name).slice(0,500),url:target,host:new URL(target).hostname,price,currency,availability:/OutOfStock|Discontinued|SoldOut/.test(offer.availability||'')?'Немає в наявності':/InStock/.test(offer.availability||'')?'Є в наявності':'Наявність уточнюйте',checkedAt:new Date().toISOString(),part,brand:typeof product.brand==='string'?product.brand:product.brand?.name,catalogNumbers:[product.sku,product.mpn,...(Array.isArray(product.additionalProperty)?product.additionalProperty.filter((p:any)=>/oem|oe number|артикул|каталож/i.test(p.name||'')).map((p:any)=>p.value):[])].filter((v:any)=>typeof v==='string')});
    }
   }
  }
  const title=decodeEntities((html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1]||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim());
- if(!offers.length&&matchesPart(title,part)){
+ if(!offers.length&&(oem?matchesCatalogNumber({title},oem):matchesPart(title,part))){
   let price=0,currency='';
   const priceTag=html.match(/<[^>]+itemprop=["']price["'][^>]*>([\s\S]*?)<\//i);
   if(priceTag){const content=priceTag[0].match(/content=["']([\d., ]+)["']/i)?.[1];price=Number((content||priceTag[1].replace(/<[^>]*>/g,'')).replace(/\s/g,'').replace(',','.'));currency=html.match(/itemprop=["']priceCurrency["'][^>]*content=["']([A-Z]{3})["']/i)?.[1]||'';}
@@ -47,7 +47,7 @@ async function readProduct(url:string,part:string,follow=true,oem=''):Promise<Pr
   html+=decoder.decode();const found=extractOffers(html,target,part,oem);if(found.length||!follow)return found;
   const links:{url:string;title:string}[]=[];
   for(const a of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)){
-   if(!matchesPart(decodeEntities(a[2].replace(/<[^>]*>/g,' ')),part))continue;
+   const linkTitle=decodeEntities(a[2].replace(/<[^>]*>/g,' '));if(!(oem?matchesCatalogNumber({title:linkTitle},oem):matchesPart(linkTitle,part)))continue;
    const candidate=new URL(decodeEntities(a[1]),target).href;
    if(candidate!==target&&allowedSeller(candidate)&&new URL(candidate).hostname===new URL(target).hostname&&!links.some(x=>x.url===candidate))links.push({url:candidate,title:decodeEntities(a[2].replace(/<[^>]*>/g,' ')).replace(/\s+/g,' ').trim()});
    if(links.length>=2)break;
@@ -57,7 +57,7 @@ async function readProduct(url:string,part:string,follow=true,oem=''):Promise<Pr
  }catch{}return [];
 }
 export async function findOffers(vehicle:string,part:string,model='',oem=''){
- const query=(oem?`${oem} ${part===oem?'':part} купити ціна Україна`:`${vehicle} ${part} купити ціна Київ`).replace(/\s+/g,' ').trim();
+ const query=(oem?`${oem} купити ціна Україна`:`${vehicle} ${part} купити ціна Київ`).replace(/\s+/g,' ').trim();
  const r=await fetch('https://html.duckduckgo.com/html/?q='+encodeURIComponent(query),{signal:AbortSignal.timeout(18000),headers:{Accept:'text/html'}});const html=await r.text();if(!r.ok||/anomaly.js|challenge-form/.test(html))throw new Error('SEARCH_UNAVAILABLE');
  const candidates=parseWebResults(html).filter(r=>allowedSeller(r.url)).slice(0,8);
  const results=(await Promise.all(candidates.map(r=>readProduct(r.url,part,true,oem)))).flat().filter(r=>oem?matchesCatalogNumber(r,oem):matchesVehicle(r.title,vehicle,model));
@@ -82,12 +82,20 @@ export function matchesVehicle(title:string,vehicle:string,model:string){
  return true;
 }
 
-export function matchesCatalogNumber(offer:Pick<ProductOffer,'title'|'catalogNumbers'>,number:string){
+export function matchesCatalogNumber(offer:Pick<ProductOffer,'title'|'catalogNumbers'|'brand'>,number:string){
  const clean=(v:string)=>v.toUpperCase().replace(/[^A-Z0-9]/g,'');
- const wanted=clean(number);if(wanted.length<4)return false;
+ const parsed=parseCatalogInput(number);
+ if(parsed.brand&&!new RegExp('(?:^|[^A-Z0-9])'+parsed.brand+'(?:$|[^A-Z0-9])','i').test([offer.title,offer.brand].filter(Boolean).join(' ')))return false;
+ const wanted=clean(parsed.number);if(wanted.length<4)return false;
  if(offer.catalogNumbers?.some(n=>clean(n)===wanted))return true;
  // Exact token boundaries, optional printed separators; never match a prefix.
  const pattern=wanted.split('').join('[ .-]*');
- return new RegExp('(?:^|[^A-Z0-9])'+pattern+'(?![A-Z0-9]|[ .-]+[A-Z0-9]{1,3}(?![A-Z0-9]))','i').test(offer.title);
+ return new RegExp('(?:^|[^A-Z0-9])'+pattern+'(?![A-Z0-9]|[ .-]+[A-Z0-9]{1,3}(?![A-Z0-9]))','i').test(offer.title.replace(/\b(?:TRW|BOSCH|BREMBO|ATE|TEXTAR|FERODO|MANN|MAHLE|DENSO|NGK|SKF|SACHS|MONROE|KYB|FEBI|INA|LUK)\b/gi,' '));
 }
 
+
+export function parseCatalogInput(input:string){
+ const brands=/\b(TRW|BOSCH|BREMBO|ATE|TEXTAR|FERODO|MANN|MAHLE|DENSO|NGK|SKF|SACHS|MONROE|KYB|FEBI|INA|LUK)\b/i;
+ const brand=input.match(brands)?.[1].toUpperCase()||'';
+ return {number:input.replace(brands,'').trim(),brand};
+}

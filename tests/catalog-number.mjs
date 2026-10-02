@@ -17,3 +17,13 @@ assert.equal(extractOffers(html,'https://prom.ua/p123-test.html','059121111X','0
 
 const {matchesVehicle}=await import('../app/product-offers.ts');
 assert.equal(matchesVehicle('Колодки Audi A6 С5 VW Passat B5','AUDI A6 2014','A6'),false);
+const {parseCatalogInput}=await import('../app/product-offers.ts');
+assert.deepEqual(parseCatalogInput('GDB3373 TRW'),{number:'GDB3373',brand:'TRW'});
+assert.ok(matchesCatalogNumber({title:'Колодки GDB3373 TRW'},'GDB3373 TRW'));
+assert.ok(!matchesCatalogNumber({title:'Колодки GDB33730 TRW'},'GDB3373 TRW'));
+assert.ok(!matchesCatalogNumber({title:'Колодки GDB3373 Bosch'},'GDB3373 TRW'));
+const pads='<script type="application/ld+json">'+JSON.stringify({'@type':'Product',name:'Brake pad set',mpn:'GDB3373',brand:{name:'TRW'},offers:{'@type':'Offer',price:1500,priceCurrency:'UAH'}})+'</script>';
+const padsFound=extractOffers(pads,'https://prom.ua/p123.html','Гальмівні колодки','GDB3373 TRW');
+assert.equal(padsFound.length,1);
+assert.ok(matchesCatalogNumber(padsFound[0],'GDB3373 TRW'));
+console.log('PASS: brand separated, exact article, translated titles, observed price');

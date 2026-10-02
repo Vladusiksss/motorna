@@ -14,8 +14,8 @@ export async function POST(request:Request){
  const {db}=await storage();const row=await db.prepare("SELECT payload FROM records WHERE id=? AND owner=? AND kind='car'").bind(data.carId,user.userId).first();
  if(!row)return Response.json({error:'Автомобіль не знайдено у вашому гаражі.'},{status:404});
  const savedCar=JSON.parse(String(row.payload));
- const decoded=await decodeVpic(String(savedCar.vin||''));
- const car={...savedCar,make:decoded.make,model:decoded.model,name:[decoded.make,decoded.model].join(' '),year:decoded.year,engine:decoded.engine};
+ const decoded=data.oem?null:await decodeVpic(String(savedCar.vin||''));
+ const car=decoded?{...savedCar,make:decoded.make,model:decoded.model,name:[decoded.make,decoded.model].join(' '),year:decoded.year,engine:decoded.engine}:savedCar;
  const engine=String(car.engine||'').replace(/(\d{3,4})\s*см[³3]/g,(_,cc)=>(Number(cc)/1000).toFixed(1)+' л').replace(/ДИЗЕЛЬНЕ ПАЛИВО/gi,'дизель').replace(/БЕНЗИН/gi,'бензин').replace(/[·]/g,' ').replace(/\s+/g,' ').trim();
  const vehicle=[car.name,car.year,engine].filter(Boolean).join(' ').slice(0,160);
  const key=JSON.stringify([user.userId,data.carId,car.vin,vehicle,data.part,data.oem]);const cached=cache.get(key);if(cached&&Date.now()-cached.at<300000)return Response.json(cached.data);

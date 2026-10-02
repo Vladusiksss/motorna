@@ -44,7 +44,7 @@ export default function Workspace({initialSection='parts'}:{initialSection?:stri
  {section==='service'&&<RepairSpace latest={lastSearch||history[0]?.data||null}/>}
  {section==='favorites'&&<FavoritesPage favorites={favorites} navigate={navigate} remove={setRemove} guard={guard} loading={loading}/>}
  {section==='profile'&&<ProfilePage history={history} cars={cars} expenses={expenses} guard={guard} name={user?.name} remove={setRemove} navigate={navigate} repeatService={value=>{setLastSearch(value);navigate('service');}}/>}
- <footer><a className="brand small" href="/" onClick={e=>{e.preventDefault();navigate('parts');}}>моторна</a><span>Більше ясності. Менше зайвих кілометрів.</span><span>Київ та Київська область</span><div id="photo-credits"/></footer></main>
+ <footer><a className="brand small" href="/" onClick={e=>{e.preventDefault();navigate('parts');}}>моторна</a><span>Більше ясності. Менше зайвих кілометрів.</span><span>Уся Україна</span><div id="photo-credits"/></footer></main>
 
 
 

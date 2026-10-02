@@ -57,7 +57,7 @@ async function readProduct(url:string,part:string,follow=true,oem=''):Promise<Pr
  }catch{}return [];
 }
 export async function findOffers(vehicle:string,part:string,model='',oem=''){
- const query=(oem?`${oem} купити ціна Україна`:`${vehicle} ${part} купити ціна Київ`).replace(/\s+/g,' ').trim();
+ const query=(oem?`${oem} купити ціна Україна`:`${vehicle} ${part} купити ціна Україна`).replace(/\s+/g,' ').trim();
  const r=await fetch('https://html.duckduckgo.com/html/?q='+encodeURIComponent(query),{signal:AbortSignal.timeout(18000),headers:{Accept:'text/html'}});const html=await r.text();if(!r.ok||/anomaly.js|challenge-form/.test(html))throw new Error('SEARCH_UNAVAILABLE');
  const candidates=parseWebResults(html).filter(r=>allowedSeller(r.url)).slice(0,8);
  const results=(await Promise.all(candidates.map(r=>readProduct(r.url,part,true,oem)))).flat().filter(r=>oem?matchesCatalogNumber(r,oem):matchesVehicle(r.title,vehicle,model));

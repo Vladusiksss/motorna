@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {readFileSync} from 'node:fs';
+const source=readFileSync('app/api/station-reviews/route.ts','utf8');
+const db=new DatabaseSync(':memory:');
+const create=source.match(/db.prepare\("(CREATE TABLE[^"\n]+)"\)/)[1];db.exec(create);
+const insert=source.match(/db.prepare\('(INSERT INTO[^'\n]+)'\)/)[1];
+const write=db.prepare(insert);
+write.run('node/1','a','Anna',5,'Good service','2026-10-01');
+write.run('node/1','a','Anna',4,'Updated review','2026-10-02');
+write.run('node/1','b','Bohdan',2,'Poor service','2026-10-02');
+const aggregate=source.match(/db.prepare\('(SELECT station, COUNT[^'\n]+)'\)/)[1];
+const [r]=db.prepare(aggregate).all();assert.equal(r.count,2);assert.equal(r.rating,3);assert.equal(r.positive,1);
+assert.throws(()=>write.run('node/1','c','Test',6,'Invalid','2026-10-02'));
+db.close();console.log('PASS: one review per account, update, aggregate rating, positive count and rating bounds');

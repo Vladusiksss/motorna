@@ -1,6 +1,7 @@
+import {usableStation,uniqueStations} from '@/app/station-quality';
 import {geocoderParameters,stationQuery,approximateDistance,uniqueAddresses,loadStationData} from '@/app/station-geography';
 import {stationContacts} from '@/app/station-contacts';
-import {directions,routeStations} from '@/app/station-routing';
+import {directions} from '@/app/station-routing';
 import {runtimeConfig} from '@/app/runtime-config';
 import {z} from 'zod';
 const cache=new Map<string,{at:number;value:any}>();const lastRequest=new Map<string,number>();
@@ -21,7 +22,7 @@ export async function POST(request:Request){
  value={locations:uniqueAddresses(locations)};
  }else{const query=stationQuery(data.lat,data.lon,data.radius);
  const body=await loadStationData(cfg.OVERPASS_URL||'https://overpass-api.de/api/interpreter',query,headers);
- value={stations:(body.elements||[]).filter((e:any)=>{const t=e.tags||{};return (t['name:uk']||t.name||t.brand)&&! /^(сто|автомайстерня|гбо|шиномонтаж)$/i.test((t['name:uk']||t.name||t.brand||'').trim())&&!['yes','true'].includes(t.disused)&&!['yes','true'].includes(t.abandoned)&&t.shop==='car_repair';}).map((e:any)=>{const t=e.tags||{},lat=e.lat??e.center?.lat,lon=e.lon??e.center?.lon;const distance=approximateDistance(data,{lat,lon});return {id:`${e.type}/${e.id}`,name:t['name:uk']||t.name||t.brand,sourceUrl:`https://www.openstreetmap.org/${e.type}/${e.id}`,checkedAt:new Date().toISOString(),lat,lon,distance:Math.round(distance*10)/10,address:[t['addr:city'],t['addr:street'],t['addr:housenumber']].filter(Boolean).join(', '),...stationContacts(t),maps:directions(data,{lat,lon}),waze:`https://www.waze.com/ul?ll=${lat},${lon}&navigate=yes`};}).filter((s:any)=>Number.isFinite(s.distance)).sort((a:any,b:any)=>a.distance-b.distance)};value.stations=await routeStations(data,value.stations,cfg.ROUTER_URL);value.origin={lat:data.lat,lon:data.lon};
+ value={stations:(body.elements||[]).filter(usableStation).map((e:any)=>{const t=e.tags||{},lat=e.lat??e.center?.lat,lon=e.lon??e.center?.lon;const distance=approximateDistance(data,{lat,lon});return {id:`${e.type}/${e.id}`,name:t['name:uk']||t.name||t.brand,sourceUrl:`https://www.openstreetmap.org/${e.type}/${e.id}`,checkedAt:new Date().toISOString(),locationPrecision:e.type==='node'?'point':'area-center',lat,lon,distance:Math.round(distance*10)/10,address:[t['addr:city'],t['addr:street'],t['addr:housenumber']].filter(Boolean).join(', '),...stationContacts(t),maps:directions(data,{lat,lon}),waze:`https://www.waze.com/ul?ll=${lat},${lon}&navigate=yes`};}).filter((s:any)=>Number.isFinite(s.distance)).sort((a:any,b:any)=>a.distance-b.distance)};value.stations=uniqueStations(value.stations).filter((s:any)=>s.distance<=data.radius);value.origin={lat:data.lat,lon:data.lon};
  }
  if(cache.size>=100)cache.delete(cache.keys().next().value!);cache.set(key,{at:Date.now(),value});return Response.json(value);
  }catch{return Response.json({error:'address' in data?'Сервіс адрес тимчасово не відповідає. Повторіть пошук.':'Адресу визначено, але сервіс СТО тимчасово не відповідає. Повторіть пошук СТО або відкрийте Google Maps.'},{status:503});}

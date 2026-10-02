@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {registerHooks} from 'node:module';
+registerHooks({resolve(s,c,next){try{return next(s,c);}catch(e){if(s.startsWith('.')&&!s.endsWith('.ts'))return next(s+'.ts',c);throw e;}}});
+const {usableStation,uniqueStations}=await import('../app/station-quality.ts');
+const station={type:'node',lat:49,lon:25,tags:{shop:'car_repair',name:'СТО'}};
+assert.ok(usableStation(station));
+for(const tags of [{disused:'yes'},{'abandoned:shop':'car_repair'},{opening_hours:'closed'},{access:'private'}])assert.equal(usableStation({...station,tags:{...station.tags,...tags}}),false);
+assert.equal(usableStation({...station,lat:null}),false);
+const a={id:'way/1',name:'Service',address:'Test 1',lat:49,lon:25,locationPrecision:'area-center'};
+const b={...a,id:'node/2',locationPrecision:'point',lat:49.00001};
+assert.deepEqual(uniqueStations([a,b]),[b]);
+assert.equal(uniqueStations([a,{...b,address:'Test 2'}]).length,2);
+assert.equal(uniqueStations([a,{...b,lat:49.01}]).length,2);
+console.log('PASS: lifecycle, coordinates, duplicate areas, distinct branches');

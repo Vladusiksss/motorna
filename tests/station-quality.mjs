@@ -12,3 +12,6 @@ assert.deepEqual(uniqueStations([a,b]),[b]);
 assert.equal(uniqueStations([a,{...b,address:'Test 2'}]).length,2);
 assert.equal(uniqueStations([a,{...b,lat:49.01}]).length,2);
 console.log('PASS: lifecycle, coordinates, duplicate areas, distinct branches');
+assert.equal(usableStation({type:'node',lat:50.5233981,lon:30.7999975,tags:{shop:'car_repair',name:'У Валери'}}),false);
+assert.equal(usableStation({type:'node',lat:50.530208,lon:30.8567725,tags:{shop:'car_repair',name:'У Валери'}}),true);
+console.log('PASS: disputed point excluded without excluding a same-name business elsewhere');

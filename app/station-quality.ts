@@ -1,6 +1,11 @@
 import {approximateDistance} from './station-geography';
 export function usableStation(e:any){
  const t=e.tags||{},name=String(t['name:uk']||t.name||t.brand||'').trim();
+ // Disputed listing reported by the user: Petliury 17 is not the Google Maps destination.
+ // Quarantine only this name/location; do not relocate a same-name business or transfer its reviews.
+ const disputedName=name.toLocaleLowerCase('uk-UA').replace(/[^\p{L}\p{N}]/gu,'');
+ const point={lat:e.lat??e.center?.lat,lon:e.lon??e.center?.lon};
+ if(['увалери','стоувалери'].includes(disputedName)&&Number.isFinite(point.lat)&&Number.isFinite(point.lon)&&approximateDistance(point,{lat:50.5233981,lon:30.7999975})<0.15)return false;
  if(t.shop!=='car_repair'||!name||!['node','way','relation'].includes(e.type))return false;
  if(['disused','abandoned','demolished','removed','construction'].some(k=>t[k]&&t[k]!=='no'||t[k+':shop']))return false;
  if(t.access==='private'||t.opening_hours==='closed'||t.opening_hours==='off')return false;

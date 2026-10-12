@@ -1,0 +1,17 @@
+import {readFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+import ts from 'typescript';
+import ExcelJS from 'exceljs';
+import pdfMake from 'pdfmake/build/pdfmake.js';
+import fonts from 'pdfmake/build/vfs_fonts.js';
+let captured=[];
+const original=pdfMake.createPdf.bind(pdfMake);
+pdfMake.createPdf=(doc)=>{const result=original(doc);return {download:async()=>{const bytes=await result.getBuffer();assert.equal(bytes.subarray(0,4).toString(),'%PDF');captured.push('pdf');}}};
+globalThis.exportTest={ExcelJS,pdfMake,fonts};
+const oldTimeout=globalThis.setTimeout;
+globalThis.document={createElement:()=>({click(){}})};
+URL.createObjectURL=(blob)=>{globalThis.xlsxBlob=blob;return 'blob:test'};URL.revokeObjectURL=()=>{};
+let source=readFileSync('app/catalog-export.ts','utf8').replace("import('exceljs')","Promise.resolve({default:globalThis.exportTest.ExcelJS})").replace("import('pdfmake/build/pdfmake')","Promise.resolve({default:globalThis.exportTest.pdfMake})").replace("import('pdfmake/build/vfs_fonts')","Promise.resolve({default:globalThis.exportTest.fonts})");
+const module=await import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));
+const data={vehicle:{name:'Тест Україна',year:2021,vin:'TEST',mileage:123},history:[{date:'2026-10-11',title:'Заміна оливи',amount:1234.50,mileage:123}],documents:[],created:Date.now()};
+await module.exportCatalog(data,'xlsx');const workbook=new ExcelJS.Workbook();await workbook.xlsx.load(await globalThis.xlsxBlob.arrayBuffer());assert.equal(workbook.getWorksheet('Історія').getCell('D2').value,1234.50);assert.equal(workbook.getWorksheet('Автомобіль').getCell('B2').value,'Тест Україна');await module.exportCatalog(data,'pdf');assert.deepEqual(captured,['pdf']);console.log('PASS: XLSX numeric values, Ukrainian text, PDF bytes');process.exit(0);

@@ -1,0 +1,3 @@
+import {storage} from '@/db/storage';
+export async function catalogDb(){const {db,bucket}=await storage();await db.prepare('CREATE TABLE IF NOT EXISTS car_documents (document_id TEXT PRIMARY KEY, car_id TEXT NOT NULL, owner TEXT NOT NULL)').run();await db.prepare('CREATE TABLE IF NOT EXISTS car_shares (token TEXT PRIMARY KEY, owner TEXT NOT NULL, car_id TEXT NOT NULL, payload TEXT NOT NULL, document_ids TEXT NOT NULL, created INTEGER NOT NULL)').run();await db.prepare('CREATE INDEX IF NOT EXISTS car_shares_owner ON car_shares(owner,car_id)').run();return {db,bucket};}
+export const shareHeaders={'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow','Referrer-Policy':'no-referrer'};

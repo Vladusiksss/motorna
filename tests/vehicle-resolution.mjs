@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {restoreVehicle,registeredVehicle} from '../app/vehicle-resolution.ts';
+const partial={vin:'WAUZZZ4G5EN130128',make:'AUDI',model:'',year:'',engine:'',fields:[],source:'NHTSA vPIC',warning:'Partial',checkedAt:'2026-10-12',needsConfirmation:true};
+const saved={...partial,model:'A6',year:'2014',engine:'3.0 дизель',source:'Мій гараж',fields:[{label:'Кузов',value:'Седан'}]};
+const result=restoreVehicle(partial,saved);
+assert.equal(result.model,'A6');assert.equal(result.year,'2014');assert.equal(result.engine,'3.0 дизель');assert.equal(result.needsConfirmation,false);
+assert.equal(restoreVehicle(partial,{...saved,vin:'OTHER'}),partial);
+assert.equal(registeredVehicle({...saved,vin:'OTHER'},partial.vin),null);
+assert.equal(registeredVehicle({...saved,year:198},partial.vin),null);
+assert.equal(registeredVehicle(saved,partial.vin).model,'A6');
+console.log('PASS: exact-VIN restoration, preserved specifications and rejected unrelated registry records');

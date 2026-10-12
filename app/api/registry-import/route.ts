@@ -3,7 +3,7 @@ import {storage} from '@/db/storage';
 export const dynamic='force-dynamic';
 export async function PUT(request:Request){
  const env=await runtimeConfig();
- if(!env.REGISTRY_IMPORT_TOKEN||request.headers.get('authorization')!=='Bearer '+env.REGISTRY_IMPORT_TOKEN)return new Response(null,{status:403});
+ if(!env.REGISTRY_IMPORT_TOKEN||request.headers.get('x-motorna-import-key')!==env.REGISTRY_IMPORT_TOKEN)return new Response(null,{status:403});
  const shard=new URL(request.url).searchParams.get('shard');
  if(!shard||!/^[a-f0-9]{2}$/.test(shard))return new Response(null,{status:400});
  if(Number(request.headers.get('content-length'))>2*1024*1024)return new Response(null,{status:413});

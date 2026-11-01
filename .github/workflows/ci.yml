@@ -1,0 +1,44 @@
+name: Motorna checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node scripts/prepare-ci.mjs
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Local API journey
+        shell: pwsh
+        run: |
+          $server = Start-Process node -ArgumentList 'scripts/run-framework.mjs','dev','--host','127.0.0.1' -PassThru -WindowStyle Hidden -RedirectStandardOutput dev-output.log -RedirectStandardError dev-error.log
+          try {
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 60; $attempt++) {
+              try { Invoke-WebRequest 'http://localhost:5173/' -TimeoutSec 5 | Out-Null; $ready = $true; break } catch { Start-Sleep -Seconds 2 }
+            }
+            if (-not $ready) { throw 'Local server did not become ready' }
+            npm run test:api
+            if ($LASTEXITCODE -ne 0) { throw 'API journey failed' }
+          } finally { taskkill /PID $server.Id /T /F | Out-Null }
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: local-server-logs
+          path: '*-*.log'

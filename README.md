@@ -17,6 +17,27 @@
 Немає ліцензійного OEM-підтвердження, гарантованого охоплення всіх магазинів, календарів партнерських СТО, оплати чи автоматичного надсилання запитів. Запит — приватна чернетка, яку власник передає продавцю сам. Знімок МВС у хмарі не оновлюється автоматично; локальний імпортер працює окремо. Закриті джерела не обходяться.
 
 ## Розробка
-React/Next.js через Vinext, TypeScript, Cloudflare D1/R2. `node scripts/run-framework.mjs dev --host 127.0.0.1` запускає локальну версію. Використовуйте адресу з виводу сервера. Локальна база та production ізольовані. `.openai` і секрети не копіюються в публічний GitHub.
+React/Next.js через Vinext, TypeScript, Cloudflare D1/R2. 
+ode scripts/run-framework.mjs dev --host 127.0.0.1` запускає локальну версію. Використовуйте адресу з виводу сервера. Локальна база та production ізольовані. `.openai` і секрети не копіюються в публічний GitHub.
 
-Перевірки: `node node_modules/typescript/bin/tsc --noEmit --incremental false`; `node tests/diagnostic-understanding.mjs`; `node --experimental-strip-types tests/maintenance.mjs`; `node --experimental-strip-types tests/purchase-journey.mjs`; `node --experimental-strip-types tests/offer-fitment.mjs`.
+Перевірки: 
+ode node_modules/typescript/bin/tsc --noEmit --incremental false`; 
+ode tests/diagnostic-understanding.mjs`; 
+ode --experimental-strip-types tests/maintenance.mjs`; 
+ode --experimental-strip-types tests/purchase-journey.mjs`; 
+ode --experimental-strip-types tests/offer-fitment.mjs`.
+
+## Автоматизовані перевірки
+
+pm test` запускає 10 регресійних наборів без зовнішніх мережевих залежностей. Для локального dev-сервера 
+pm run test:api` перевіряє вхід, збережений VIN, діагностику, створення/читання запиту, TXT та відмову анонімним запитам; власні тестові записи видаляє. Це API-інтеграційний сценарій, не автоматизований браузерний E2E.
+
+`.github/workflows/ci.yml` запускає встановлення, lint, typecheck, регресії, build і локальний API-сценарій на Windows/Node 24. Він не публікує сайт і не потребує production-секретів. `scripts/prepare-ci.mjs` створює лише відсутній ігнорований маніфест локальних DB/BUCKET без ідентичності production. Для перевірок із чистого клону в CI це необхідно, бо `.openai` не публікується.
+
+
+pm run lint` блокує нові помилки відносно явно збереженого `eslint-baseline.json`. Наявний борг — 127 помилок; 
+pm run lint:strict` показує всі та наразі завершується з помилкою. Baseline не оновлюється автоматично. Умови не стали слабшими: вихідні правила ESLint залишилися, виключені лише згенеровані й сторонні файли. Борг потрібно поступово усувати, а не збільшувати baseline.
+
+Мобільні фільтри (локальна перевірка, порожній результат не замінюється демотоварами):
+
+![Мобільні фільтри](docs/images/mobile-filters.jpg)

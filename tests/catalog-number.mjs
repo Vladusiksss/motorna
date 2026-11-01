@@ -27,3 +27,9 @@ const padsFound=extractOffers(pads,'https://prom.ua/p123.html','Гальмівн
 assert.equal(padsFound.length,1);
 assert.ok(matchesCatalogNumber(padsFound[0],'GDB3373 TRW'));
 console.log('PASS: brand separated, exact article, translated titles, observed price');
+
+const malformed='<script type="application/ld+json">'+JSON.stringify({'@type':'Product',name:'Термостат',brand:123,additionalProperty:[null,42,{name:'OEM',value:{bad:true}}],offers:[null,{'@type':'Offer',url:{bad:true},price:99,priceCurrency:'UAH'}]})+'</script>';
+assert.doesNotThrow(()=>extractOffers(malformed,'https://prom.ua/p123-test.html','Термостат'));
+assert.equal(extractOffers(malformed,'https://prom.ua/p123-test.html','Термостат').length,0);
+assert.deepEqual(extractOffers('<script type="application/ld+json">[null,42]</script>','https://prom.ua/p123-test.html','Термостат'),[]);
+console.log('PASS: malformed JSON-LD properties and URLs rejected without crashing');

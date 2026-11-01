@@ -4,23 +4,31 @@ const sellers=['vag115.com.ua','autopartner.in.ua','renix.ua','evocar.ua','avto.
 export function allowedSeller(value:string){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&(!u.port||u.port==='443')&&sellers.some(h=>u.hostname===h||u.hostname.endsWith('.'+h));}catch{return false;}}
 function normalize(v:string){return v.toLowerCase().replace(/ё/g,'е').replace(/стійк|стойк|тяга|тяги/g,'linkrod').replace(/стабіліз|стабилиз/g,'stabiliz').replace(/гальмівн|тормозн/g,'brake').replace(/колодк/g,'pad').replace(/амортизатор/g,'shock').replace(/[^\p{L}\p{N}]+/gu,' ').trim();}
 export function matchesPart(title:string,part:string){for(const direction of [/(передн|front)/i,/(задн|rear)/i,/(лів|лев|left)/i,/(прав|right)/i]){if(direction.test(part)&&!direction.test(title))return false;}const hay=normalize(title);const words=normalize(part).split(' ').filter(w=>w.length>2&&!['передня','передній','задня','задній','ліва','права','для','авто'].includes(w));return words.length>0&&words.every(w=>hay.includes(/\d/.test(w)?w:w.slice(0,w.length>5?5:w.length)));}
-function nodes(value:any):any[]{if(Array.isArray(value))return value.flatMap(nodes);if(!value||typeof value!=='object')return [];return [value,...(value['@graph']?nodes(value['@graph']):[]),...(value.mainEntity?nodes(value.mainEntity):[]),...(value.itemListElement?nodes(value.itemListElement):[]),...(value.item?nodes(value.item):[])];}
+function object(value:unknown):Record<string,unknown>{return value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};}
+function nodes(value:unknown):Record<string,unknown>[]{if(Array.isArray(value))return value.flatMap(nodes);if(!value||typeof value!=='object')return [];const node=object(value);return [node,...nodes(node['@graph']),...nodes(node.mainEntity),...nodes(node.itemListElement),...nodes(node.item)];}
 export function extractOffers(html:string,url:string,part:string,oem=''):ProductOffer[]{
  const offers:ProductOffer[]=[];
  for(const script of html.matchAll(/<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)){
-  let roots:any[];try{roots=nodes(JSON.parse(script[1].trim()));}catch{continue;}
+  let roots:Record<string,unknown>[];try{roots=nodes(JSON.parse(script[1].trim()));}catch{continue;}
   for(const product of roots){
    if(![product['@type']].flat().includes('Product')||typeof product.name!=='string')continue;
-   const catalogNumbers=[product.sku,product.mpn,...(Array.isArray(product.additionalProperty)?product.additionalProperty.filter((p:any)=>/oem|oe number|артикул|каталож/i.test(p.name||'')).map((p:any)=>p.value):[])].filter((v:any)=>typeof v==='string');
-   const numberOnly=!!oem&&matchesCatalogNumber({title:product.name,catalogNumbers,brand:typeof product.brand==='string'?product.brand:product.brand?.name},oem);
+   const properties=Array.isArray(product.additionalProperty)?product.additionalProperty.map(object):[];
+   const catalogNumbers=[product.sku,product.mpn,...properties.filter(p=>/oem|oe number|артикул|каталож/i.test(typeof p.name==='string'?p.name:'')).map(p=>p.value)].filter((v):v is string=>typeof v==='string');
+   const brandName=typeof product.brand==='string'?product.brand:object(product.brand).name;
+   const brand=typeof brandName==='string'?brandName:undefined;
+   const numberOnly=!!oem&&matchesCatalogNumber({title:product.name,catalogNumbers,brand},oem);
    if(!matchesPart(product.name,part)&&!numberOnly)continue;
-   for(const offer of [product.offers].flat().filter(Boolean)){
+   for(const value of [product.offers].flat().filter(Boolean)){
+    const offer=object(value),spec=object(offer.priceSpecification);
     if(offer['@type']==='AggregateOffer'||offer.lowPrice||offer.highPrice)continue;
-    const price=Number(String(offer.price??offer.priceSpecification?.price??'').replace(/\s/g,'').replace(',','.'));
-    const currency=String(offer.priceCurrency||offer.priceSpecification?.priceCurrency||'').toUpperCase();
+    const price=Number(String(offer.price??spec.price??'').replace(/\s/g,'').replace(',','.'));
+    const currency=String(offer.priceCurrency||spec.priceCurrency||'').toUpperCase();
     if(!Number.isFinite(price)||price<=0||price>10000000||!['UAH','EUR','USD','GBP'].includes(currency))continue;
-    const target=offer.url||product.url?new URL(offer.url||product.url,url).href:url;if(!allowedSeller(target)||new URL(target).hostname!==new URL(url).hostname)continue;
-    offers.push({title:decodeEntities(product.name).slice(0,500),url:target,host:new URL(target).hostname,price,currency,availability:/OutOfStock|Discontinued|SoldOut/.test(offer.availability||'')?'Немає в наявності':/InStock/.test(offer.availability||'')?'Є в наявності':'Наявність уточнюйте',checkedAt:new Date().toISOString(),part,brand:typeof product.brand==='string'?product.brand:product.brand?.name,catalogNumbers:[product.sku,product.mpn,...(Array.isArray(product.additionalProperty)?product.additionalProperty.filter((p:any)=>/oem|oe number|артикул|каталож/i.test(p.name||'')).map((p:any)=>p.value):[])].filter((v:any)=>typeof v==='string')});
+    const link=offer.url||product.url;if(link!==undefined&&typeof link!=='string')continue;
+    let target:string;try{target=link?new URL(link,url).href:url;}catch{continue;}
+    if(!allowedSeller(target)||new URL(target).hostname!==new URL(url).hostname)continue;
+    const availability=typeof offer.availability==='string'?offer.availability:'';
+    offers.push({title:decodeEntities(product.name).slice(0,500),url:target,host:new URL(target).hostname,price,currency,availability:/OutOfStock|Discontinued|SoldOut/.test(availability)?'Немає в наявності':/InStock/.test(availability)?'Є в наявності':'Наявність уточнюйте',checkedAt:new Date().toISOString(),part,brand,catalogNumbers});
    }
   }
  }

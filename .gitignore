@@ -57,3 +57,7 @@ __pycache__/
 *.db
 *.log
 *.key
+
+# Browser test outputs
+/playwright-report/
+/test-results/

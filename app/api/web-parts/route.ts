@@ -4,7 +4,7 @@ import {getChatGPTUser} from '@/app/chatgpt-auth';
 import {storage} from '@/db/storage';
 import {z} from 'zod';
 const schema=z.object({carId:z.string().uuid(),part:z.string().trim().min(2).max(140),oem:z.string().trim().max(40).regex(/^[A-Za-z0-9 .-]*$/).default('')});
-const cache=new Map<string,{at:number;data:any}>();
+const cache=new Map<string,{at:number;data:unknown}>();
 export const dynamic='force-dynamic';
 export async function POST(request:Request){
  if(request.headers.get('sec-fetch-site')==='cross-site')return Response.json({error:'Недозволений запит'},{status:403});

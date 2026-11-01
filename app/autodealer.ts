@@ -12,4 +12,8 @@ export async function acatRequest(path:string,token=process.env.AUTODEALER_TOKEN
  if(!r.ok)throw Error(r.status===401||r.status===403?'CATALOG_ACCESS_DENIED':'CATALOG_UNAVAILABLE');
  return r.json();
 }
-export function catalogParts(data:any){return (Array.isArray(data.numbers)?data.numbers:[]).flatMap((row:any)=>(Array.isArray(row.parts)?row.parts:[]).filter((p:any)=>typeof p.number==='string'&&/^[A-Za-z0-9 .-]{2,40}$/.test(p.number)).map((p:any)=>({number:p.number,name:String(p.name||row.name||p.number).slice(0,140),description:String(p.description||''),notice:String(p.notice||'')})));}
+function object(value:unknown):Record<string,unknown>{return value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};}
+export function catalogParts(data:unknown){
+ const numbers=object(data).numbers;if(!Array.isArray(numbers))return [];
+ return numbers.flatMap(value=>{const row=object(value);if(!Array.isArray(row.parts))return [];return row.parts.flatMap(value=>{const part=object(value);if(typeof part.number!=='string'||!/^[A-Za-z0-9 .-]{2,40}$/.test(part.number))return [];return [{number:part.number,name:String(part.name||row.name||part.number).slice(0,140),description:String(part.description||''),notice:String(part.notice||'')}];});});
+}

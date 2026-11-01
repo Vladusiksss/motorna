@@ -1,5 +1,5 @@
 export const categories=[{id:'brakes',name:'Гальмівна система',description:'Колодки, диски'},{id:'oil',name:'Мастила та рідини',description:'Для надійної роботи'},{id:'filters',name:'Фільтри',description:'Чистота має значення'},{id:'electric',name:'Електрика',description:'Акумулятори, свічки'},{id:'suspension',name:'Підвіска',description:'Комфорт на дорозі'},{id:'engine',name:'Двигун',description:'Серце автомобіля'}];
-export type Part={id:string;name:string;brand:string;sku:string;category:string;price:number;spec:string;keywords:string;offers:{shop:string;price:number;delivery:number;days:string}[]};
+export type Part={dataMode:'demo';id:string;name:string;brand:string;sku:string;category:string;price:number;spec:string;keywords:string;offers:{shop:string;price:number;delivery:number;days:string}[]};
 const raw=[
 ['p1','Гальмівні колодки, передні','Brembo','P 85 020','brakes',1240,'Комплект · передня вісь','тормозні тормоза колодки'],
 ['p2','Гальмівний диск','Bosch','0 986 479 153','brakes',1690,'1 шт. · вентильований · 288 мм','диски тормозні'],
@@ -14,8 +14,8 @@ const raw=[
 ['p11','Ремінь приводу','Gates','6PK1053','engine',560,'Поліклиновий · 6 ребер','ремень генератор'],
 ['p12','Стійка стабілізатора','Lemförder','26774 02','suspension',780,'1 шт. · передня вісь','стук ходова стабілізатор']
 ] as const;
-export const parts:Part[]=raw.map(([id,name,brand,sku,category,price,spec,keywords])=>({id,name,brand,sku,category,price,spec,keywords,offers:[{shop:'Демо · Автосклад',price,delivery:90,days:'1–2 дні'},{shop:'Демо · Деталь+',price:Math.round(price*1.06),delivery:0,days:'2–3 дні'},{shop:'Демо · МоторМаркет',price:Math.round(price*.97),delivery:150,days:'3–4 дні'}]}));
-export const services=[{id:'s1',name:'Майстерня на Подолі',city:'Київ',area:'Поділ',jobs:'Гальма, підвіска, ТО',rate:700},{id:'s2',name:'Мотор Сервіс',city:'Київ',area:'Оболонь',jobs:'Діагностика, двигун, електрика',rate:850},{id:'s3',name:'Захід Авто',city:'Львів',area:'Франківський район',jobs:'ТО, підвіска, гальма',rate:650},{id:'s4',name:'Південь Гараж',city:'Одеса',area:'Київський район',jobs:'Діагностика, електрика, ТО',rate:600}];
+export const parts:Part[]=raw.map(([id,name,brand,sku,category,price,spec,keywords])=>({dataMode:'demo',id,name,brand,sku,category,price,spec,keywords,offers:[{shop:'Демо · Автосклад',price,delivery:90,days:'1–2 дні'},{shop:'Демо · Деталь+',price:Math.round(price*1.06),delivery:0,days:'2–3 дні'},{shop:'Демо · МоторМаркет',price:Math.round(price*.97),delivery:150,days:'3–4 дні'}]}));
+export const services=[{id:'s1',name:'Майстерня на Подолі',city:'Київ',area:'Поділ',jobs:'Гальма, підвіска, ТО',rate:700},{id:'s2',name:'Мотор Сервіс',city:'Київ',area:'Оболонь',jobs:'Діагностика, двигун, електрика',rate:850},{id:'s3',name:'Захід Авто',city:'Львів',area:'Франківський район',jobs:'ТО, підвіска, гальма',rate:650},{id:'s4',name:'Південь Гараж',city:'Одеса',area:'Київський район',jobs:'Діагностика, електрика, ТО',rate:600}].map(service=>({...service,dataMode:'demo' as const,name:'Демо · '+service.name}));
 export const money=(n:number)=>new Intl.NumberFormat('uk-UA',{style:'currency',currency:'UAH',maximumFractionDigits:0}).format(n);
 export const normalize=(s:string)=>s.toLocaleLowerCase('uk-UA').replace(/[^\p{L}\p{N}]/gu,'');
 export function searchParts(query:string,category='all'){const q=normalize(query);return parts.filter(p=>(category==='all'||p.category===category)&&(!q||normalize(`${p.name} ${p.brand} ${p.sku} ${p.keywords}`).includes(q)));}

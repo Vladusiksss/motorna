@@ -61,8 +61,10 @@ export async function findOffers(vehicle:string,part:string,model='',oem=''){
  const r=await fetch('https://html.duckduckgo.com/html/?q='+encodeURIComponent(query),{signal:AbortSignal.timeout(18000),headers:{Accept:'text/html'}});const html=await r.text();if(!r.ok||/anomaly.js|challenge-form/.test(html))throw new Error('SEARCH_UNAVAILABLE');
  const candidates=parseWebResults(html).filter(r=>allowedSeller(r.url)).slice(0,8);
  const results=(await Promise.all(candidates.map(r=>readProduct(r.url,part,true,oem)))).flat().filter(r=>oem?matchesCatalogNumber(r,oem):matchesVehicle(r.title,vehicle,model));
- return {query,results:Array.from(new Map(results.map(r=>[r.url,r])).values()).sort((a,b)=>a.currency.localeCompare(b.currency)||a.price-b.price).slice(0,20)};
+ return {query,results:Array.from(new Map(results.map(r=>[offerIdentity(r.url),r])).values()).sort((a,b)=>a.currency.localeCompare(b.currency)||a.price-b.price).slice(0,20)};
 }
+
+export function offerIdentity(url:string){const u=new URL(url);if(u.hostname==='prom.ua')u.pathname=u.pathname.replace(/^\/(?:ua|ru)\//,'/');u.search='';u.hash='';return u.href;}
 
 export function matchesVehicle(title:string,vehicle:string,model:string){
  const words=(model||vehicle.split(' ').slice(1,2).join(' ')).toLowerCase().split(/\s+/).filter(w=>w.length>1&&!/^\d{4}$/.test(w));
@@ -74,10 +76,18 @@ export function matchesVehicle(title:string,vehicle:string,model:string){
  const vehicleCodes=vehicle.toUpperCase().replace(/С/g,'C').replace(/В/g,'B').split(/[^A-Z0-9]+/);
  if(platforms.length&&!platforms.some(code=>vehicleCodes.includes(code)))return false;
  const year=Number(vehicle.match(/\b(?:19|20)\d{2}\b/)?.[0]);
+ const litres=Number(vehicle.match(/\b([1-9][.,]\d)\s*л/i)?.[1]?.replace(',','.'));
+ const engineRanges=Array.from(title.matchAll(/\b([1-9][.,]\d)\s*[-–]\s*([1-9][.,]\d)(?!\d)/g));
+ if(litres&&engineRanges.length&&!engineRanges.some(r=>litres>=Number(r[1].replace(',','.'))&&litres<=Number(r[2].replace(',','.'))))return false;
+ const titleDiesel=/\b(?:diesel|tdi|cdi|dci|hdi|td)\b|дизел/i.test(title),titlePetrol=/gasoline|petrol|бензин/i.test(title);
+ if(/gasoline|petrol|бензин/i.test(vehicle)&&titleDiesel&&!titlePetrol)return false;
+ if(/diesel|дизел/i.test(vehicle)&&titlePetrol&&!titleDiesel)return false;
  const ranges=Array.from(title.matchAll(/\b((?:19|20)\d{2})\s*[-–]\s*((?:19|20)\d{2})\b/g));
  if(year&&ranges.length&&!ranges.some(r=>year>=Number(r[1])&&year<=Number(r[2])))return false;
  const shortRanges=Array.from(title.matchAll(/\b(\d{2})\s*[-–]\s*(\d{2})(?:\b|г|р)/g));
  const full=(n:string)=>Number(n)>30?1900+Number(n):2000+Number(n);
+ const openYears=Array.from(title.matchAll(/\b((?:19|20)\d{2}|\d{2})\s*[-–](?=\s*(?:[,)]|$))/g));
+ if(year&&openYears.length&&!openYears.some(r=>year>=(r[1].length===4?Number(r[1]):full(r[1]))))return false;
  if(year&&!ranges.length&&shortRanges.length&&!shortRanges.some(r=>year>=full(r[1])&&year<=full(r[2])))return false;
  return true;
 }

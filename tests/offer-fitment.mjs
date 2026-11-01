@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {registerHooks} from 'node:module';
+registerHooks({resolve(specifier,context,next){return next(specifier==='./vehicle-search'?'./vehicle-search.ts':specifier,context);}});
+const {matchesVehicle,offerIdentity}=await import('../app/product-offers.ts');
+const vehicle='HONDA Accord 2003 3.0 л · J30A4 · Gasoline';
+assert.equal(matchesVehicle('Термостат Honda Accord/Civic/CR-V 1.2-2.0i 94- MOTORAD',vehicle,'Accord'),false);
+assert.equal(matchesVehicle('Термостат Honda Accord 18-, 19310-5MS-H01',vehicle,'Accord'),false);
+assert.equal(matchesVehicle('Термостат Honda Accord 2.0-4.0 D/TD',vehicle,'Accord'),false);
+assert.equal(matchesVehicle('Термостат Honda Accord (1996-) VERNET',vehicle,'Accord'),true,'A candidate with no explicit contradiction is still unverified, never confirmed');
+assert.equal(matchesVehicle('Термостат Honda Accord 3.0-3.5',vehicle,'Accord'),true);
+assert.equal(offerIdentity('https://prom.ua/ua/p123-part.html'),offerIdentity('https://prom.ua/p123-part.html'));
+console.log('PASS: explicit engine/fuel/year mismatches rejected and localized duplicate offers merged');

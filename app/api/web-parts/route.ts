@@ -1,5 +1,5 @@
 import {decodeVpic,VpicError} from '@/app/vpic';
-import {findOffers} from '@/app/product-offers';
+import {findOffers,matchesCatalogNumber} from '@/app/product-offers';
 import {getChatGPTUser} from '@/app/chatgpt-auth';
 import {storage} from '@/db/storage';
 import {z} from 'zod';
@@ -20,7 +20,7 @@ export async function POST(request:Request){
  const vehicle=[car.name,car.year,engine].filter(Boolean).join(' ').slice(0,160);
  const key=JSON.stringify([user.userId,data.carId,car.vin,vehicle,data.part,data.oem]);const cached=cache.get(key);if(cached&&Date.now()-cached.at<300000)return Response.json(cached.data);
  const result=await findOffers(vehicle,data.part,car.model||'',data.oem);
- const payload={...result,results:result.results.map(r=>({...r,fitment:{status:'unverified',reason:data.oem?'Каталожний номер збігається зі сторінкою товару. Його застосовність до VIN не підтверджена.':'Модель і назву деталі зіставлено. Відповідність комплектації за VIN не підтверджена.'}})),carId:data.carId,oem:data.oem,checkedAt:new Date().toISOString(),fitmentStatus:'unverified',notice:result.results.length?'Знайдені товари ще не підтверджені за комплектацією VIN.':'Не знайдено конкретних товарів із ціною. Уточніть назву деталі або артикул.'};
+ const payload={...result,results:result.results.map(r=>({...r,dataMode:'live',numberMatch:!!data.oem&&matchesCatalogNumber(r,data.oem),fitment:{status:'unverified',reason:data.oem?'Каталожний номер збігається зі сторінкою товару. Його застосовність до VIN не підтверджена.':'Модель і назву деталі зіставлено. Відповідність комплектації за VIN не підтверджена.'}})),carId:data.carId,oem:data.oem,checkedAt:new Date().toISOString(),fitmentStatus:'unverified',notice:result.results.length?'Знайдені товари ще не підтверджені за комплектацією VIN.':'Не знайдено конкретних товарів із ціною. Уточніть назву деталі або артикул.'};
  if(cache.size>=50)cache.delete(cache.keys().next().value!);cache.set(key,{at:Date.now(),data:payload});return Response.json(payload);
  }catch(e){if(e instanceof VpicError)return Response.json({error:e.message,code:'VIN_NOT_VERIFIED'},{status:e.status});return Response.json({error:'Автоматичний пошук тимчасово недоступний. Повторіть спробу.',code:'SEARCH_UNAVAILABLE'},{status:503});}
 }

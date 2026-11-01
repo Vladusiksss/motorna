@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {serviceReminder} from '../app/maintenance.ts';
+import {schemas} from '../app/validation.ts';
+const now=new Date('2026-11-01T10:00:00Z');
+assert.equal(serviceReminder({mileage:100,nextService:200,nextServiceDate:'2026-11-01'},now).due,true);
+assert.equal(serviceReminder({mileage:200,nextService:200,nextServiceDate:'2027-01-01'},now).due,true);
+assert.equal(serviceReminder({mileage:100,nextService:200,nextServiceDate:'2027-01-01'},now).due,false);
+assert.equal(serviceReminder({mileage:0,nextService:0},now).due,false);
+const car={name:'Audi A6',year:2014,engine:'3.0 TDI',vin:'',mileage:0,nextService:0};
+assert.equal(schemas.car.safeParse({...car,nextServiceDate:'2026-02-30'}).success,false);
+assert.equal(schemas.car.safeParse({...car,nextServiceDate:'2026-11-01'}).success,true);
+console.log('Maintenance boundaries and calendar validation passed');

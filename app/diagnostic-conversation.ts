@@ -91,6 +91,9 @@ export function analyzeConversation(input:{vehicle:string;symptoms:string;histor
   if(facts.has('no_crank')){facts.delete('starting_unknown');facts.delete('crank_no_start');}
  }
  const text=normalized.join('\n');
+ const obdCodes=[...new Set((users.join(' ').toUpperCase().match(/\b[PBCU][0-3][0-9A-F]{3}\b/g)||[]))];
+ for(const code of obdCodes){if(/^P030[0-9]$/.test(code))facts.set('rough',code);else if(code==='P0299')facts.set('power',code);else if(code==='P0128')facts.set('cold_engine',code);}
+
  const diesel=/дизел|diesel|\btdi\b|\bcdi\b|\bhdi\b|\bdci\b/i.test(input.vehicle);
  const electric=/електр|electric|\bbev\b/i.test(input.vehicle)&&!/гібрид|hybrid/i.test(input.vehicle);
  let causes:DiagnosticCause[]=[];
@@ -111,6 +114,15 @@ export function analyzeConversation(input:{vehicle:string;symptoms:string;histor
  }
  let note=causes.length?'За вашим описом варто перевірити:\n\n'+causes.slice(0,4).map((c,i)=>`${i+1}. ${c.title}. ${c.explanation}`).join('\n\n')+'\n\nСпочатку виконайте перевірки нижче — купувати деталь до підтвердження причини зарано.':facts.has('starting_unknown')?'Незапуск має дві різні гілки: стартер не прокручує двигун або двигун прокручується, але не запускається. Одна відповідь нижче допоможе вибрати потрібні перевірки.':next?.id==='knock_location'?'Стук може походити від двигуна, підвіски або кермового механізму. Важливо визначити, коли й де його чути.':next?.id==='smoke'?'Колір і момент появи вихлопу допоможуть відрізнити конденсат від несправності.':'У цьому повідомленні не визначено конкретного симптому. Можна описати зміну в роботі авто або результати перевірки.';
  if(facts.has('oil')||facts.has('engine_knock'))note='Якщо стук сильний і новий або горить лампа тиску оливи, зупиніть авто й заглушіть двигун.\n\n'+note;
+ if(obdCodes.length){
+  const explanations=obdCodes.map(code=>{
+   const meaning=/^P030[0-9]$/.test(code)?(code==='P0300'?'Виявлені випадкові або множинні пропуски згоряння':`Виявлені пропуски згоряння в циліндрі ${Number(code.at(-1))}`):code==='P0299'?'Тиск наддуву нижчий від очікуваного':code==='P0128'?'Температура охолоджувальної рідини нижча від очікуваної для регулювання термостатом':code==='P0420'?'Ефективність каталізатора нижча від порога, банк 1':'';
+   return meaning?`${code}: ${meaning}.`:`${code}: у вбудованому довіднику немає перевіреного пояснення. Потрібна документація виробника для вашого двигуна.`;
+  });
+  note='Коди OBD-II\n'+explanations.join('\n')+'\n\nКод описує виявлену умову, а не доводить поломку конкретної деталі. Збережіть freeze-frame, статус кодів і параметри до очищення пам’яті. \n\n'+(causes.length?note:'Почніть із перевірок за сервісною документацією для цього VIN.');
+  if(obdCodes.includes('P0420'))note+='\n\nДля P0420 перевіряють супутні коди, герметичність вихлопу й сигнали датчиків перед рішенням про заміну каталізатора.';
+  if(next?.id==='generic'||next?.id==='codes')next=undefined;
+ }
  if(history.some(m=>m.role==='user'))note='Врахував ваше уточнення: «'+latest+'».\n\n'+note;
  if(/дякую|спасиб/u.test(last)){note='Будь ласка. Якщо з’являться нові симптоми або результати діагностики, напишіть їх тут.';next=undefined;}
  return {causes,questions:next?[next.text]:[],questionId:next?.id||'',choices:next?.choices||[],note,method:'guided',recognized:[...facts.keys()],normalizedProblem:correctDescription(input.symptoms),hasCorrection:false};

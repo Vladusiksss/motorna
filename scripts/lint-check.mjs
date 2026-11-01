@@ -7,7 +7,7 @@ const results=await engine.lintFiles(['.']);
 const counts=new Map();
 for(const result of results)for(const message of result.messages){
  if(message.severity!==2)continue;
- const key=[relative(process.cwd(),result.filePath).replaceAll('\\','/'),message.ruleId||'parse',message.message].join('|');
+ const key=[relative(process.cwd(),result.filePath).replaceAll('\\','/'),message.ruleId||'parse',message.message.split(/\r?\n/)[0]].join('|');
  counts.set(key,(counts.get(key)||0)+1);
 }
 let added=0;

@@ -17,7 +17,8 @@
     "lint:strict": "eslint .",
     "test": "node scripts/test-regression.mjs",
     "test:api": "node tests/journey-api.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:production": "node tests/production-smoke.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

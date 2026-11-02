@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {boundedUpload,verifyDocument,UploadError} from '../app/document-upload.ts';
+const pdf=new TextEncoder().encode('%PDF-1.7\nTest fixture\n%%EOF\n').buffer;
+assert.doesNotThrow(()=>verifyDocument(pdf,'application/pdf'));
+for(const mime of ['image/jpeg','image/png','text/html'])assert.throws(()=>verifyDocument(pdf,mime),UploadError);
+assert.throws(()=>verifyDocument(new ArrayBuffer(0),'application/pdf'),UploadError);
+const large=new ReadableStream({start(controller){controller.enqueue(new Uint8Array(4*1024*1024));controller.enqueue(new Uint8Array(3*1024*1024));controller.close();}});
+await assert.rejects(()=>boundedUpload(new Request('https://test',{method:'POST',body:large,duplex:'half',headers:{'content-length':'1'}})),e=>e instanceof UploadError&&e.status===413);
+assert.equal((await boundedUpload(new Request('https://test',{method:'POST',body:'small'}))).byteLength,5);
+console.log('PASS: matching file signature, empty files and actual streamed limit with dishonest Content-Length');

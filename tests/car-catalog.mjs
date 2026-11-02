@@ -18,5 +18,5 @@ user={userId:'owner-a'};let res=await post([docId]);assert.equal(res.status,200)
 const read=(doc)=>publicApi.GET(new Request('https://test/api/shared-car/'+token+(doc?'?document='+doc:'')),{params:Promise.resolve({token})});
 user=null;res=await read();const catalog=await res.json();assert.equal(catalog.documents.length,1);assert.equal(catalog.documents[0].id,docId);assert.equal(catalog.owner,undefined);assert.equal((await read(privateDoc)).status,404);assert.equal((await read(docId)).status,200);
 user={userId:'owner-b'};await owner.DELETE(new Request('https://test?token='+token));assert.equal((await read()).status,200);
-user={userId:'owner-a'};await post([],token);assert.equal((await read(docId)).status,404);await owner.DELETE(new Request('https://test?token='+token));assert.equal((await read()).status,404);
+user={userId:'owner-a'};await post([],token);assert.equal((await read(docId)).status,404);await owner.DELETE(new Request('https://test?token='+token));assert.equal((await read()).status,404);assert.equal((await read(docId)).status,404);
 console.log('PASS: owner isolation, anonymous snapshot, receipt opt-in, updates, revocation');

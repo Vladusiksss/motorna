@@ -3,10 +3,10 @@ import {useEffect,useState} from 'react';
 import {toast} from 'sonner';
 import {z} from 'zod';
 const shareResponse=z.object({shares:z.array(z.object({token:z.string().regex(/^[a-f0-9]{64}$/),document_ids:z.string()}))});
-import type {RecordItem} from './data';
+import type {RecordOf,DocumentInfo} from './record-types';
 import type {Catalog} from './catalog-export';
-type Doc={id:string;name:string;size:number;carId?:string};
-type Props={cars:RecordItem[];expenses:RecordItem[];docs:Doc[];carId:string;onSelect:(id:string)=>void;onAddHistory:()=>void;onDocument:(d:Doc)=>void};
+type Doc=DocumentInfo;
+type Props={cars:RecordOf<'car'>[];expenses:RecordOf<'expense'>[];docs:Doc[];carId:string;onSelect:(id:string)=>void;onAddHistory:()=>void;onDocument:(d:Doc)=>void};
 export default function CarDossier(props:Props){const id=props.cars.find(c=>c.id===props.carId)?.id||props.cars[0]?.id;return <DossierContent key={id||'empty'} {...props}/>;}
 function DossierContent({cars,expenses,docs,carId,onSelect,onAddHistory,onDocument}:Props){
  const [token,setToken]=useState(''),[selected,setSelected]=useState<string[]>([]),[qr,setQr]=useState(''),[busy,setBusy]=useState(false),[ready,setReady]=useState(false),[error,setError]=useState('');

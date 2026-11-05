@@ -1,4 +1,5 @@
 "use client";
+import type {SaveRecord} from './record-types';
 import {useState} from 'react';
 import {ClipboardCopy,Download,Trash2,ShoppingBag} from 'lucide-react';
 import {Sheet,SheetContent,SheetTitle,SheetDescription} from '@/components/ui/sheet';
@@ -18,7 +19,7 @@ function DraftView({draft,editable,onChange,onSave,saving,exportId}:{draft:Purch
  <div className="purchase-actions">{onSave&&<button className="primary" disabled={saving||!draft.lines.length} onClick={onSave}>{saving?'Зберігаємо…':'Зберегти запит'}</button>}<button className="outline-btn" disabled={!draft.lines.length} onClick={async()=>{try{await navigator.clipboard.writeText(purchaseText(draft));toast.success('Запит скопійовано. Надішліть його продавцю.');}catch{toast.error('Не вдалося скопіювати. Завантажте файл запиту.');}}}><ClipboardCopy size={17}/>Скопіювати</button>{exportId?<a className="outline-btn" href={'/api/purchase-request/'+exportId} download><Download size={17}/>Завантажити TXT</a>:<button className="outline-btn" disabled={!draft.lines.length} onClick={()=>download(draft)}><Download size={17}/>Завантажити TXT</button>}</div>
  </article>;
 }
-export function PurchaseComposer({save,signedIn,onSaved}:{save:(kind:string,data:any)=>Promise<any>;signedIn:boolean;onSaved:()=>void}){
+export function PurchaseComposer({save,signedIn,onSaved}:{save:SaveRecord;signedIn:boolean;onSaved:()=>void}){
  const {drafts,update,clear,open,setOpen}=usePurchase();const [saving,setSaving]=useState('');
  return <Sheet open={open} onOpenChange={setOpen}><SheetContent side="right" className="purchase-sheet"><SheetTitle>Запит на купівлю</SheetTitle><SheetDescription>Перевірте деталі й VIN. Запит не надсилається автоматично.</SheetDescription>{!drafts.length&&<p>Додайте пропозицію з результатів пошуку.</p>}{drafts.map(draft=><DraftView key={draft.carId} draft={draft} editable onChange={update} saving={saving===draft.carId} onSave={async()=>{if(!signedIn){toast.error('Увійдіть, щоб зберегти запит.');return;}setSaving(draft.carId);try{const result=await save('purchaseRequest',{carId:draft.carId,lines:draft.lines,note:draft.note,status:'draft'});if(result){clear(draft.carId);setOpen(false);toast.success('Чернетку збережено. Для надсилання скопіюйте текст або завантажте файл.');onSaved();}}finally{setSaving('');}}}/>)}</SheetContent></Sheet>;
 }

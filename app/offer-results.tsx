@@ -1,4 +1,5 @@
 "use client";
+import type {SaveRecord} from './record-types';
 import {useState} from 'react';
 import {useIsMobile} from '@/hooks/use-mobile';
 import {Sheet,SheetContent,SheetTitle,SheetDescription} from '@/components/ui/sheet';
@@ -7,7 +8,7 @@ import type {LinkResult} from './vehicle-finder';
 import type {RecordItem} from './data';
 import {filterOffers,emptyOfferFilters} from './offer-filters';
 import {usePurchase} from './purchase-context';
-export default function OfferResults({results,vehicle,carId,vin,oem,records,signedIn,save}:{results:LinkResult[];vehicle:string;carId:string;vin:string;oem:string;records:RecordItem[];signedIn:boolean;save:(kind:string,data:any)=>Promise<any>}){
+export default function OfferResults({results,vehicle,carId,vin,oem,records,signedIn,save}:{results:LinkResult[];vehicle:string;carId:string;vin:string;oem:string;records:RecordItem[];signedIn:boolean;save:SaveRecord}){
  const purchase=usePurchase();const mobile=useIsMobile();
  const [filters,setFilters]=useState(emptyOfferFilters),[open,setOpen]=useState(false),[saving,setSaving]=useState<string[]>([]);
  const visible=filterOffers(results,filters),sellers=[...new Set(results.map(o=>o.host))].sort(),currencies=[...new Set(results.map(o=>o.currency).filter((v):v is string=>!!v))],brands=[...new Set(results.map(o=>o.brand).filter((v):v is string=>!!v))].sort();

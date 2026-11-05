@@ -19,4 +19,4 @@ export const services=[{id:'s1',name:'Майстерня на Подолі',city
 export const money=(n:number)=>new Intl.NumberFormat('uk-UA',{style:'currency',currency:'UAH',maximumFractionDigits:0}).format(n);
 export const normalize=(s:string)=>s.toLocaleLowerCase('uk-UA').replace(/[^\p{L}\p{N}]/gu,'');
 export function searchParts(query:string,category='all'){const q=normalize(query);return parts.filter(p=>(category==='all'||p.category===category)&&(!q||normalize(`${p.name} ${p.brand} ${p.sku} ${p.keywords}`).includes(q)));}
-export type RecordItem={id:string;kind:string;data:any;created:number};
+export type {RecordItem} from './record-types';

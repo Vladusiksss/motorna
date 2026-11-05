@@ -17,8 +17,9 @@ async function addVehicle(page:Page,vin:string){
  // Wait for actual records hydration before entering a VIN (selection may remount Finder).
  const recordsResponse=await hydrated;expect(recordsResponse.status()).toBe(200);await recordsResponse.json();
  await page.getByRole('button',{name:'Додати авто',exact:true}).click();
- await page.getByRole('textbox',{name:'VIN автомобіля',exact:true}).fill(vin);
- await page.getByRole('button',{name:'Знайти авто',exact:true}).click();
+ await page.getByRole('button',{name:'VIN',exact:true}).click();
+ await page.getByRole('textbox',{name:'VIN для пошуку',exact:true}).fill(vin);
+ await page.locator('.unified-search').getByRole('button',{name:'Знайти',exact:true}).click();
  await page.getByRole('button',{name:'Підтвердити авто',exact:true}).click();
  await expect(page.getByText('Збережено в гаражі',{exact:true})).toBeVisible();
  await page.getByRole('tab',{name:'Знаю потрібну деталь',exact:true}).click();
@@ -60,10 +61,24 @@ test('VIN → car → article → filters → private request → reload → TXT
   const composer=page.getByRole('dialog',{name:'Запит на купівлю'});
   await expect(composer).toContainText(vin);
   await composer.getByRole('spinbutton',{name:/Кількість:/}).fill('2');
+  // The server commits the first request, but its response is lost in transit.
+  const keys:string[]=[];
+  await page.route('**/api/records',async route=>{
+   const req=route.request();if(req.method()!=='POST'||req.postDataJSON().kind!=='purchaseRequest'){await route.continue();return;}
+   keys.push(req.headers()['idempotency-key']);
+   const response=await route.fetch();
+   if(keys.length===1)await route.abort('failed');else await route.fulfill({response});
+  });
   await composer.getByRole('button',{name:'Зберегти запит',exact:true}).click();
+  await expect(composer.getByRole('button',{name:'Зберегти запит',exact:true})).toBeEnabled();
+  await expect(page.getByText('Failed to fetch',{exact:false})).toBeVisible();
+  await composer.getByRole('button',{name:'Зберегти запит',exact:true}).click();
+  await expect.poll(()=>keys.length).toBe(2);
+  expect(keys[0]).toMatch(/^[a-f0-9-]{36}$/);expect(keys[1]).toBe(keys[0]);
   await expect(page).toHaveURL(/\/requests$/);
   await page.reload();
   const saved=page.locator('.purchase-draft').filter({hasText:vin});
+  await expect(saved).toHaveCount(1);
   await expect(saved).toContainText('Чернетка · не надіслана продавцю');
   await expect(saved).toContainText('2 шт.');
   const download=page.waitForEvent('download');
@@ -107,4 +122,17 @@ test('switching garage cars clears the previous public QR catalog',async({page})
   await expect(page.getByRole('link',{name:'Відкрити каталог ↗',exact:true})).toHaveCount(0);
   await expect(page.getByRole('img',{name:'QR-код каталогу автомобіля',exact:true})).toHaveCount(0);
  }finally{await cleanup(page,vin);await cleanup(page,secondVin);}
+});
+
+test('initial screen hides unknown vehicle traits and separates search modes',async({page},info)=>{
+ await page.goto('/');
+ await expect(page.locator('.vehicle-visual')).toContainText('Додайте автомобіль, щоб персоналізувати пошук');
+ await expect(page.locator('.vehicle-visual')).not.toContainText('Кузов не визначено');
+ await expect(page.locator('.vehicle-visual')).not.toContainText('Колір не визначено');
+ await expect(page.getByRole('textbox',{name:'VIN для пошуку',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Симптоми',exact:true}).click();
+ await expect(page.getByRole('textbox',{name:'Опис симптомів',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Запчастина',exact:true}).click();
+ await expect(page.getByRole('combobox',{name:'Назва деталі або артикул',exact:true})).toBeVisible();
+ await page.screenshot({path:info.outputPath('search-modes.png'),fullPage:false});
 });

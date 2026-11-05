@@ -4,7 +4,7 @@ export type RecordKind=keyof typeof schemas;
 type Data<K extends RecordKind>=z.infer<(typeof schemas)[K]> & (K extends 'purchaseRequest'?{vehicle:string;vin:string}:object);
 export type RecordOf<K extends RecordKind>={id:string;kind:K;data:Data<K>;created:number};
 export type RecordItem={[K in RecordKind]:RecordOf<K>}[RecordKind];
-export type SaveRecord=(kind:RecordKind,data:unknown,id?:string)=>Promise<RecordItem|null>;
+export type SaveRecord=(kind:RecordKind,data:unknown,id?:string,options?:{idempotencyKey?:string})=>Promise<RecordItem|null>;
 export const documentSchema=z.object({id:z.string().uuid(),name:z.string(),size:z.number(),mime:z.string(),created:z.number(),carId:z.string().nullish().transform(value=>value??undefined)});
 export type DocumentInfo=z.infer<typeof documentSchema>;
 export type RemovableRecord=RecordItem|{id:string;kind:'document';data:DocumentInfo;created:number};

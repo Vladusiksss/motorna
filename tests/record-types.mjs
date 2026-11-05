@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {z} from 'zod';
+import {routedSearchIntent} from '../app/search-intent.ts';
 import {schemas} from '../app/validation.ts';
 globalThis.recordTypeTest={z,schemas};
 const source=readFileSync('app/record-types.ts','utf8').replace(/^import .*;\r?\n/gm,'');
@@ -22,3 +23,8 @@ const doc={id,name:'Receipt.pdf',size:100,mime:'application/pdf',created:1,carId
 assert.equal(documentSchema.parse(doc).carId,undefined);
 assert.equal(documentSchema.parse({...doc,carId:id}).carId,id);
 console.log('PASS: record discriminators, malformed records, purchase VIN snapshot and unlinked receipts');
+
+assert.equal(routedSearchIntent('waU zzz4g5en130128','vin').text,'WAUZZZ4G5EN130128');
+assert.equal(routedSearchIntent('стукає двигун','problem').kind,'problem');
+assert.equal(routedSearchIntent('GDB3373','part').kind,'oem');
+assert.equal(routedSearchIntent('стук','part').kind,'part');

@@ -5,6 +5,7 @@ import {registerHooks} from 'node:module';
 import ts from 'typescript';
 registerHooks({resolve(s,c,next){try{return next(s,c);}catch(e){if(s.startsWith('.')&&!s.endsWith('.ts'))return next(s+'.ts',c);throw e;}}});
 const {schemas}=await import('../app/validation.ts');
+const {purchaseRecordId,validPurchaseKey,samePurchaseInput}=await import('../app/purchase-idempotency.ts');
 const {allowedSeller}=await import('../app/product-offers.ts');
 const {purchaseText}=await import('../app/purchase-model.ts');
 const {boundedUpload,verifyDocument,UploadError}=await import('../app/document-upload.ts');
@@ -16,8 +17,8 @@ const db={prepare(sql){let args=[];return {bind(...values){args=values;return th
 const objects=new Map();
 const bucket={async put(key,value){objects.set(key,new Uint8Array(value));},async get(key){const body=objects.get(key);return body?{body}:null;},async delete(key){objects.delete(key);}};
 let user={userId:'owner-a',displayName:'A',email:'a@example.test'};
-globalThis.securityTest={schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser:async()=>user,storage:async()=>({db,bucket}),catalogDb:async()=>({db,bucket}),shareHeaders:{'Cache-Control':'no-store'}};
-async function route(path){const source=readFileSync(path,'utf8').replace(/^import .*;\r?\n/gm,'');const setup='const {schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser,storage,catalogDb,shareHeaders}=globalThis.securityTest;\n';return import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(setup+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));}
+globalThis.securityTest={purchaseRecordId,validPurchaseKey,samePurchaseInput,schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser:async()=>user,storage:async()=>({db,bucket}),catalogDb:async()=>({db,bucket}),shareHeaders:{'Cache-Control':'no-store'}};
+async function route(path){const source=readFileSync(path,'utf8').replace(/^import .*;\r?\n/gm,'');const setup='const {purchaseRecordId,validPurchaseKey,samePurchaseInput,schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser,storage,catalogDb,shareHeaders}=globalThis.securityTest;\n';return import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(setup+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));}
 const records=await route('app/api/records/route.ts'),documents=await route('app/api/documents/route.ts'),document=await route('app/api/documents/[id]/route.ts'),requests=await route('app/api/purchase-request/[id]/route.ts'),shares=await route('app/api/car-catalog/route.ts'),publicShare=await route('app/api/shared-car/[token]/route.ts');
 const carA=crypto.randomUUID(),carB=crypto.randomUUID();
 const car={name:'TEST Honda',year:2003,engine:'3.0',vin:'1HGCM82633A004352',mileage:100,nextService:200};
@@ -34,7 +35,21 @@ try{
  assert.equal((await documents.POST(upload(carA,Buffer.alloc(5*1024*1024+1)))).status,400);
  const draft={carId:carA,lines:[{title:'Test inquiry',part:'Термостат',oem:'TEST123',quantity:1,dataMode:'inquiry',fitment:'unverified'}],note:'',status:'draft'};
  response=await records.POST(json('api/records',{kind:'purchaseRequest',data:draft}));assert.equal(response.status,201);const requestA=(await response.json()).record.id;
+ const key=crypto.randomUUID();
+ const submit=(data=draft,requestKey=key)=>records.POST(json('api/records',{kind:'purchaseRequest',data},'POST',{'Idempotency-Key':requestKey}));
+ const concurrent=await Promise.all(Array.from({length:5},()=>submit()));
+ assert.ok(concurrent.every(r=>r.status===201));
+ const duplicates=await Promise.all(concurrent.map(r=>r.json()));
+ const first=duplicates[0].record;
+ assert.ok(duplicates.every(d=>d.record.id===first.id&&d.record.created===first.created));
+ assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM records WHERE id=?').get(first.id).n,1);
+ assert.deepEqual((await (await submit()).json()).record,first,'Lost-response retry returns the original snapshot');
+ assert.equal((await submit({...draft,note:'Changed input'})).status,409);
+ assert.equal((await submit(draft,'bad-key')).status,400);
+ const independent=await (await submit(draft,crypto.randomUUID())).json();assert.notEqual(independent.record.id,first.id);
  user={userId:'owner-b',displayName:'B',email:'b@example.test'};
+ const otherOwner=await (await submit({...draft,carId:carB})).json();assert.notEqual(otherOwner.record.id,first.id,'Keys are scoped to the authenticated owner');
+
  assert.ok(!(await (await records.GET()).json()).records.some(r=>r.id===carA||r.id===requestA));
  assert.equal((await records.PATCH(json('api/records',{id:carA,data:car},'PATCH'))).status,404);
  assert.equal((await records.DELETE(new Request('https://test/api/records?id='+carA,{method:'DELETE'}))).status,404);
@@ -62,5 +77,5 @@ try{
  assert.equal((await readShared()).status,404);assert.equal((await readShared(docA)).status,404,'Saved document URL must stop working after revocation');
  assert.equal((await document.GET(new Request('https://test'),context(docA))).status,200,'Owner retains private receipt after share revocation');
  for(const bad of ['http://prom.ua/x','https://prom.ua.evil.test/x','https://localhost/x','https://127.0.0.1/x','https://prom.ua:8443/x','https://user:pass@prom.ua/x'])assert.equal(allowedSeller(bad),false,bad);
- console.log('PASS: A/B record, expense, request and document isolation; upload signatures/size; anonymous refusal; QR opt-in and saved URL revocation; seller URL boundary');
+ console.log('PASS: A/B record, expense, request and document isolation; upload signatures/size; anonymous refusal; QR opt-in and saved URL revocation; seller URL boundary; concurrent idempotency, retry snapshots and key conflicts');
 }finally{sqlite.close();delete globalThis.securityTest;}

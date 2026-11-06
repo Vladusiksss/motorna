@@ -39,8 +39,22 @@ try{
   deleteGate.release();assert.equal((await deleting).status,409);assert.ok(sqlite.prepare('SELECT id FROM records WHERE id=?').get(carId));assertNoOrphans();
   assert.equal((await remove(child.id)).status,200);assert.equal((await remove(carId)).status,200);assert.equal((await create(kind,carId)).status,404);assert.equal((await remove(carId)).status,404);
  }
+ // All existing child types restrict deletion until the last dependent row is gone.
+ const parent=addCar(),children=[];
+ for(const kind of ['expense','searchHistory','purchaseRequest']){
+  const response=await create(kind,parent,kind==='purchaseRequest'?crypto.randomUUID():undefined);assert.equal(response.status,201);children.push((await response.json()).record.id);
+ }
+ const snapshot=()=>sqlite.prepare('SELECT * FROM records ORDER BY id').all();
+ for(const childId of children){
+  const before=snapshot();const denied=await remove(parent);assert.equal(denied.status,409);assert.equal((await denied.json()).code,'CONFLICT');assert.deepEqual(snapshot(),before,'Blocked deletion must preserve every record');
+  assert.equal((await remove(childId)).status,200);assert.equal((await remove(childId)).status,404);assertNoOrphans();
+ }
+ assert.equal((await remove(parent)).status,200);assert.equal((await remove(parent)).status,404);
+ for(const kind of ['expense','searchHistory','purchaseRequest'])assert.equal((await create(kind,parent,kind==='purchaseRequest'?crypto.randomUUID():undefined)).status,404);
+ // Concurrent DELETE succeeds once; subsequent attempts leave the database unchanged.
+ const repeated=addCar();const deletions=await Promise.all(Array.from({length:6},()=>remove(repeated)));assert.deepEqual(deletions.map(r=>r.status).sort(),[200,404,404,404,404,404]);assertNoOrphans();
  const changing=addCar(),updateGate=pauseWrite(sql=>sql.startsWith('UPDATE records'));
  const patch=route.PATCH(new Request(MOTORNA_ORIGIN+'/api/records',{method:'PATCH',headers:{Origin:MOTORNA_ORIGIN,'Content-Type':'application/json'},body:JSON.stringify({id:changing,data:{...car,mileage:500}})}));await updateGate.reached;assert.equal((await remove(changing)).status,200);updateGate.release();assert.equal((await patch).status,404,'PATCH must not report an already deleted car as saved');
  const owned=addCar();user={userId:'owner-b'};assert.equal((await create('expense',owned)).status,404);assert.equal((await create('searchHistory',owned)).status,404);assert.equal((await create('purchaseRequest',owned,crypto.randomUUID())).status,404);assert.equal((await remove(owned)).status,404);assertNoOrphans();
- console.log('PASS: INSERT/DELETE races in both orders for expenses, history and keyed/unkeyed requests; 409 restrict, stale parents, owner isolation, no orphans');
+ console.log('PASS: INSERT/DELETE races in both orders for expenses, history and keyed/unkeyed requests; combined existing dependents, state-preserving 409, sequential/concurrent repeated DELETE, stale parents, owner isolation, no orphans');
 }finally{sqlite.close();delete globalThis.integrityTest;}

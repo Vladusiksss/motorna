@@ -60,6 +60,35 @@ try{
  assert.equal(JSON.parse(sqlite.prepare('SELECT payload FROM records WHERE id=?').get(carA).payload).mileage,100);
  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM car_shares').get().n,0);
  assert.equal((await document.GET(new Request(MOTORNA_ORIGIN),context(docA))).status,200);
+ // Route-level streaming limits and Origin checks must have no DB/R2 side effects.
+ const state=()=>({tables:['records','documents','car_documents','car_shares'].map(table=>sqlite.prepare('SELECT * FROM '+table+' ORDER BY rowid').all()),objects:[...objects].map(([key,value])=>[key,[...value]])});
+ const expected=state();
+ async function denied(response,status,code){assert.equal(response.status,status);const body=await response.json();assert.equal(body.code,code);assert.ok(body.message);assert.equal(body.requestId,response.headers.get('x-request-id'));assert.deepEqual(state(),expected);}
+ function streamRequest(method,headers,chunks,path='records'){let pulls=0,cancelled=false;const stream=new ReadableStream({pull(controller){if(pulls<chunks.length)controller.enqueue(new TextEncoder().encode(chunks[pulls++]));else controller.close();},cancel(){cancelled=true;}},{highWaterMark:0});return {request:new Request(MOTORNA_ORIGIN+'/api/'+path,{method,headers,body:stream,duplex:'half'}),get pulls(){return pulls},get cancelled(){return cancelled}};}
+ for(const method of ['POST','PATCH'])for(const length of [undefined,'1']){
+  const input=streamRequest(method,{Origin:MOTORNA_ORIGIN,'Content-Type':'application/json',...(length?{'Content-Length':length}:{})},['{',' '.repeat(60000),'never read']);
+  await denied(await records[method](input.request),413,'JSON_BODY_TOO_LARGE');assert.equal(input.pulls,2);assert.equal(input.cancelled,true);
+ }
+ for(const length of [undefined,'1']){
+  const input=streamRequest('POST',{Origin:MOTORNA_ORIGIN,'Content-Type':'multipart/form-data; boundary=safety',...(length?{'Content-Length':length}:{})},['--safety\r\n','x'.repeat(6*1024*1024),'never read'],'documents');
+  await denied(await documents.POST(input.request),413,'PAYLOAD_TOO_LARGE');assert.equal(input.pulls,2);assert.equal(input.cancelled,true);
+ }
+ // The same JSON is valid at the exact byte boundary, including multibyte text.
+ const valid=JSON.stringify({kind:'car',data:{...car,name:'Авто Україна'}});const bytes=new TextEncoder().encode(valid).length;
+ const exact=new Request(MOTORNA_ORIGIN+'/api/records',{method:'POST',headers:{Origin:MOTORNA_ORIGIN,'Content-Type':'application/json'},body:valid+' '.repeat(60000-bytes)});
+ const accepted=await records.POST(exact);assert.equal(accepted.status,201);const acceptedId=(await accepted.json()).record.id;
+ assert.equal((await records.DELETE(new Request(MOTORNA_ORIGIN+'/api/records?id='+acceptedId,{method:'DELETE',headers:{Origin:MOTORNA_ORIGIN}}))).status,200);assert.deepEqual(state(),expected);
+ const badHeaders=[{}, {Origin:''},{Origin:'null'},{Origin:'https://evil.test'},{Origin:MOTORNA_ORIGIN+'.evil.test'},{Origin:MOTORNA_ORIGIN+'/'},{Origin:MOTORNA_ORIGIN+':8443'},{Origin:MOTORNA_ORIGIN.replace('https:','http:')},{Origin:'https://user@'+new URL(MOTORNA_ORIGIN).host},{Origin:MOTORNA_ORIGIN+', https://evil.test'},{Origin:MOTORNA_ORIGIN,'Sec-Fetch-Site':'same-site'},{Origin:MOTORNA_ORIGIN,Referer:'https://evil.test/'},{Origin:'https://evil.test','X-Forwarded-Host':'evil.test',Forwarded:'host=evil.test'}];
+ for(const headers of badHeaders){
+  const input=streamRequest('POST',{'Content-Type':'application/json',...headers},[JSON.stringify({kind:'car',data:car})]);
+  await denied(await records.POST(input.request),403,'CSRF_REJECTED');assert.equal(input.pulls,0,'Origin rejection must precede body reading');
+  await denied(await records.PATCH(new Request(MOTORNA_ORIGIN+'/api/records',{method:'PATCH',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify({id:carA,data:{...car,mileage:999}})})),403,'CSRF_REJECTED');
+  await denied(await records.DELETE(new Request(MOTORNA_ORIGIN+'/api/records?id='+carA,{method:'DELETE',headers})),403,'CSRF_REJECTED');
+  await denied(await shares.POST(new Request(MOTORNA_ORIGIN+'/api/car-catalog',{method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify({carId:carA,documentIds:[]})})),403,'CSRF_REJECTED');
+  const form=new FormData();form.set('file',new File([png],'receipt.png',{type:'image/png'}));form.set('carId',carA);
+  await denied(await documents.POST(new Request(MOTORNA_ORIGIN+'/api/documents',{method:'POST',headers,body:form})),403,'CSRF_REJECTED');
+  await denied(await document.DELETE(new Request(MOTORNA_ORIGIN+'/api/documents/'+docA,{method:'DELETE',headers}),context(docA)),403,'CSRF_REJECTED');
+ }
  const draft={carId:carA,lines:[{title:'Test inquiry',part:'Термостат',oem:'TEST123',quantity:1,dataMode:'inquiry',fitment:'unverified'}],note:'',status:'draft'};
  response=await records.POST(json('api/records',{kind:'purchaseRequest',data:draft}));assert.equal(response.status,201);const requestA=(await response.json()).record.id;
  const key=crypto.randomUUID();
@@ -100,9 +129,13 @@ try{
  user={userId:'owner-b'};await shares.DELETE(new Request(MOTORNA_ORIGIN+'/api/car-catalog?token='+token,{method:'DELETE',headers:{Origin:MOTORNA_ORIGIN}}));assert.equal((await readShared(docA)).status,200);
  user={userId:'owner-a'};
  assert.equal((await shares.DELETE(new Request(MOTORNA_ORIGIN+'/api/car-catalog?token='+token,{method:'DELETE',headers:{Origin:MOTORNA_ORIGIN,'sec-fetch-site':'cross-site'}}))).status,403);
- await shares.DELETE(new Request(MOTORNA_ORIGIN+'/api/car-catalog?token='+token,{method:'DELETE',headers:{Origin:MOTORNA_ORIGIN}}));
+ assert.equal((await shares.DELETE(new Request(MOTORNA_ORIGIN+'/api/car-catalog?token='+token,{method:'DELETE',headers:{Origin:MOTORNA_ORIGIN}}))).status,200);
+ const revoked=state();assert.equal((await shares.DELETE(new Request(MOTORNA_ORIGIN+'/api/car-catalog?token='+token,{method:'DELETE',headers:{Origin:MOTORNA_ORIGIN}}))).status,200);assert.deepEqual(state(),revoked);
  assert.equal((await readShared()).status,404);assert.equal((await readShared(docA)).status,404,'Saved document URL must stop working after revocation');
  assert.equal((await document.GET(new Request(MOTORNA_ORIGIN+''),context(docA))).status,200,'Owner retains private receipt after share revocation');
+ assert.equal((await document.DELETE(new Request(MOTORNA_ORIGIN+'/api/documents/'+docA,{method:'DELETE',headers:{Origin:MOTORNA_ORIGIN}}),context(docA))).status,200);
+ assert.equal(sqlite.prepare('SELECT id FROM documents WHERE id=?').get(docA),undefined);assert.equal(objects.has('owner-a/'+docA),false);
+ const deleted=state();assert.equal((await document.DELETE(new Request(MOTORNA_ORIGIN+'/api/documents/'+docA,{method:'DELETE',headers:{Origin:MOTORNA_ORIGIN}}),context(docA))).status,404);assert.deepEqual(state(),deleted);assert.ok(sqlite.prepare('SELECT id FROM documents WHERE id=?').get(docB),'Other owner receipt must survive repeated deletion');
  for(const bad of ['http://prom.ua/x','https://prom.ua.evil.test/x','https://localhost/x','https://127.0.0.1/x','https://prom.ua:8443/x','https://user:pass@prom.ua/x'])assert.equal(allowedSeller(bad),false,bad);
  console.log('PASS: A/B record, expense, request and document isolation; upload signatures/size; anonymous refusal; QR opt-in and saved URL revocation; seller URL boundary; concurrent idempotency, retry snapshots and key conflicts');
 }finally{sqlite.close();delete globalThis.securityTest;}

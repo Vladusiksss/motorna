@@ -1,3 +1,4 @@
+import {mutationGuard,MOTORNA_ORIGIN} from '../app/mutation-security.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
@@ -18,22 +19,35 @@ const db={prepare(sql){let args=[];return {bind(...values){args=values;return th
 const objects=new Map();
 const bucket={async put(key,value){objects.set(key,new Uint8Array(value));},async get(key){const body=objects.get(key);return body?{body}:null;},async delete(key){objects.delete(key);}};
 let user={userId:'owner-a',displayName:'A',email:'a@example.test'};
-globalThis.securityTest={recordQuery,recordPage,RecordQueryError,purchaseRecordId,validPurchaseKey,samePurchaseInput,schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser:async()=>user,storage:async()=>({db,bucket}),catalogDb:async()=>({db,bucket}),shareHeaders:{'Cache-Control':'no-store'}};
-async function route(path){const source=readFileSync(path,'utf8').replace(/^import .*;\r?\n/gm,'');const setup='const {recordQuery,recordPage,RecordQueryError,purchaseRecordId,validPurchaseKey,samePurchaseInput,schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser,storage,catalogDb,shareHeaders}=globalThis.securityTest;\n';return import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(setup+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));}
+globalThis.securityTest={mutationGuard,recordQuery,recordPage,RecordQueryError,purchaseRecordId,validPurchaseKey,samePurchaseInput,schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser:async()=>user,storage:async()=>({db,bucket}),catalogDb:async()=>({db,bucket}),shareHeaders:{'Cache-Control':'no-store'}};
+async function route(path){const source=readFileSync(path,'utf8').replace(/^import .*;\r?\n/gm,'');const setup='const {mutationGuard,recordQuery,recordPage,RecordQueryError,purchaseRecordId,validPurchaseKey,samePurchaseInput,schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser,storage,catalogDb,shareHeaders}=globalThis.securityTest;\n';return import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(setup+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));}
 const records=await route('app/api/records/route.ts'),documents=await route('app/api/documents/route.ts'),document=await route('app/api/documents/[id]/route.ts'),requests=await route('app/api/purchase-request/[id]/route.ts'),shares=await route('app/api/car-catalog/route.ts'),publicShare=await route('app/api/shared-car/[token]/route.ts');
 const carA=crypto.randomUUID(),carB=crypto.randomUUID();
 const car={name:'TEST Honda',year:2003,engine:'3.0',vin:'1HGCM82633A004352',mileage:100,nextService:200};
 for(const [id,owner] of [[carA,'owner-a'],[carB,'owner-b']])sqlite.prepare('INSERT INTO records VALUES (?,?,?,?,?)').run(id,owner,'car',JSON.stringify(car),0);
-const json=(path,data,method='POST',headers={})=>new Request('https://test/'+path,{method,headers:{'Content-Type':'application/json',...headers},body:JSON.stringify(data)});
+const json=(path,data,method='POST',headers={})=>new Request(MOTORNA_ORIGIN+'/'+path,{method,headers:{Origin:MOTORNA_ORIGIN,'Content-Type':'application/json',...headers},body:JSON.stringify(data)});
 const context=id=>({params:Promise.resolve({id})});
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII=','base64');
-function upload(carId,content=png,type='image/png'){const form=new FormData();form.set('file',new File([content],'receipt.png',{type}));form.set('carId',carId);return new Request('https://test/api/documents',{method:'POST',body:form});}
+function upload(carId,content=png,type='image/png'){const form=new FormData();form.set('file',new File([content],'receipt.png',{type}));form.set('carId',carId);return new Request(MOTORNA_ORIGIN+'/api/documents',{method:'POST',headers:{Origin:MOTORNA_ORIGIN},body:form});}
 try{
  assert.equal((await records.GET()).headers.get('cache-control'),'private, no-store');
  assert.equal((await documents.GET()).headers.get('cache-control'),'private, no-store');
  let response=await documents.POST(upload(carA));assert.equal(response.status,201);const docA=(await response.json()).document.id;
  assert.equal((await documents.POST(upload(carA,Buffer.from('<html>not a PNG</html>')))).status,400);
  assert.equal((await documents.POST(upload(carA,Buffer.alloc(5*1024*1024+1)))).status,400);
+ // Authenticated cross-origin attempts must not mutate existing data.
+ const beforeRecords=sqlite.prepare('SELECT COUNT(*) AS n FROM records').get().n;
+ for(const origin of ['null','https://evil.test']){
+  assert.equal((await records.POST(json('api/records',{kind:'car',data:car},'POST',{Origin:origin}))).status,403);
+  assert.equal((await records.PATCH(json('api/records',{id:carA,data:{...car,mileage:999}},'PATCH',{Origin:origin}))).status,403);
+  assert.equal((await records.DELETE(new Request(MOTORNA_ORIGIN+'/api/records?id='+carA,{method:'DELETE',headers:{Origin:origin}}))).status,403);
+  assert.equal((await shares.POST(json('api/car-catalog',{carId:carA,documentIds:[docA]},'POST',{Origin:origin}))).status,403);
+  assert.equal((await document.DELETE(new Request(MOTORNA_ORIGIN+'/api/documents/'+docA,{method:'DELETE',headers:{Origin:origin}}),context(docA))).status,403);
+ }
+ assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM records').get().n,beforeRecords);
+ assert.equal(JSON.parse(sqlite.prepare('SELECT payload FROM records WHERE id=?').get(carA).payload).mileage,100);
+ assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM car_shares').get().n,0);
+ assert.equal((await document.GET(new Request(MOTORNA_ORIGIN),context(docA))).status,200);
  const draft={carId:carA,lines:[{title:'Test inquiry',part:'Термостат',oem:'TEST123',quantity:1,dataMode:'inquiry',fitment:'unverified'}],note:'',status:'draft'};
  response=await records.POST(json('api/records',{kind:'purchaseRequest',data:draft}));assert.equal(response.status,201);const requestA=(await response.json()).record.id;
  const key=crypto.randomUUID();
@@ -53,30 +67,30 @@ try{
 
  assert.ok(!(await (await records.GET()).json()).records.some(r=>r.id===carA||r.id===requestA));
  assert.equal((await records.PATCH(json('api/records',{id:carA,data:car},'PATCH'))).status,404);
- assert.equal((await records.DELETE(new Request('https://test/api/records?id='+carA,{method:'DELETE'}))).status,404);
+ assert.equal((await records.DELETE(new Request(MOTORNA_ORIGIN+'/api/records?id='+carA,{method:'DELETE',headers:{Origin:MOTORNA_ORIGIN}}))).status,404);
  assert.equal((await records.POST(json('api/records',{kind:'expense',data:{carId:carA,title:'Test repair',date:'2026-11-01',amount:10,mileage:100}}))).status,404);
  assert.equal((await records.POST(json('api/records',{kind:'purchaseRequest',data:draft}))).status,404);
- assert.equal((await requests.GET(new Request('https://test'),context(requestA))).status,404);
- assert.equal((await document.GET(new Request('https://test'),context(docA))).status,404);
- assert.equal((await document.DELETE(new Request('https://test',{method:'DELETE'}),context(docA))).status,404);
+ assert.equal((await requests.GET(new Request(MOTORNA_ORIGIN+''),context(requestA))).status,404);
+ assert.equal((await document.GET(new Request(MOTORNA_ORIGIN+''),context(docA))).status,404);
+ assert.equal((await document.DELETE(new Request(MOTORNA_ORIGIN+'',{method:'DELETE',headers:{Origin:MOTORNA_ORIGIN}}),context(docA))).status,404);
  assert.equal((await documents.POST(upload(carA))).status,400);
  assert.equal((await (await documents.GET()).json()).documents.length,0);
  response=await documents.POST(upload(carB));assert.equal(response.status,201);const docB=(await response.json()).document.id;
  user={userId:'owner-a',displayName:'A',email:'a@example.test'};
  assert.equal((await shares.POST(json('api/car-catalog',{carId:carA,documentIds:[docB]}))).status,400);
  response=await shares.POST(json('api/car-catalog',{carId:carA,documentIds:[docA]}));assert.equal(response.status,200);const token=(await response.json()).token;
- const readShared=(id)=>publicShare.GET(new Request('https://test/api/shared-car/'+token+(id?'?document='+id:'')),{params:Promise.resolve({token})});
+ const readShared=(id)=>publicShare.GET(new Request(MOTORNA_ORIGIN+'/api/shared-car/'+token+(id?'?document='+id:'')),{params:Promise.resolve({token})});
  user=null;
  assert.equal((await records.GET()).status,401);assert.equal((await documents.GET()).status,401);
- assert.equal((await requests.GET(new Request('https://test'),context(requestA))).status,401);
+ assert.equal((await requests.GET(new Request(MOTORNA_ORIGIN+''),context(requestA))).status,401);
  response=await readShared(docA);assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');assert.equal(response.headers.get('x-content-type-options'),'nosniff');
  assert.equal((await readShared(docB)).status,404);
- user={userId:'owner-b'};await shares.DELETE(new Request('https://test/api/car-catalog?token='+token,{method:'DELETE'}));assert.equal((await readShared(docA)).status,200);
+ user={userId:'owner-b'};await shares.DELETE(new Request(MOTORNA_ORIGIN+'/api/car-catalog?token='+token,{method:'DELETE',headers:{Origin:MOTORNA_ORIGIN}}));assert.equal((await readShared(docA)).status,200);
  user={userId:'owner-a'};
- assert.equal((await shares.DELETE(new Request('https://test/api/car-catalog?token='+token,{method:'DELETE',headers:{'sec-fetch-site':'cross-site'}}))).status,403);
- await shares.DELETE(new Request('https://test/api/car-catalog?token='+token,{method:'DELETE'}));
+ assert.equal((await shares.DELETE(new Request(MOTORNA_ORIGIN+'/api/car-catalog?token='+token,{method:'DELETE',headers:{Origin:MOTORNA_ORIGIN,'sec-fetch-site':'cross-site'}}))).status,403);
+ await shares.DELETE(new Request(MOTORNA_ORIGIN+'/api/car-catalog?token='+token,{method:'DELETE',headers:{Origin:MOTORNA_ORIGIN}}));
  assert.equal((await readShared()).status,404);assert.equal((await readShared(docA)).status,404,'Saved document URL must stop working after revocation');
- assert.equal((await document.GET(new Request('https://test'),context(docA))).status,200,'Owner retains private receipt after share revocation');
+ assert.equal((await document.GET(new Request(MOTORNA_ORIGIN+''),context(docA))).status,200,'Owner retains private receipt after share revocation');
  for(const bad of ['http://prom.ua/x','https://prom.ua.evil.test/x','https://localhost/x','https://127.0.0.1/x','https://prom.ua:8443/x','https://user:pass@prom.ua/x'])assert.equal(allowedSeller(bad),false,bad);
  console.log('PASS: A/B record, expense, request and document isolation; upload signatures/size; anonymous refusal; QR opt-in and saved URL revocation; seller URL boundary; concurrent idempotency, retry snapshots and key conflicts');
 }finally{sqlite.close();delete globalThis.securityTest;}

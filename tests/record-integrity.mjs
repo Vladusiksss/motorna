@@ -1,3 +1,4 @@
+import {mutationGuard,MOTORNA_ORIGIN} from '../app/mutation-security.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
@@ -11,16 +12,16 @@ const {allowedSeller}=await import('../app/product-offers.ts');
 const sqlite=new DatabaseSync(':memory:');sqlite.exec(readFileSync('drizzle/0000_conscious_richard_fisk.sql','utf8'));
 let user={userId:'owner-a'},beforeWrite;
 const db={prepare(sql){let args=[];return {bind(...v){args=v;return this;},async first(){return sqlite.prepare(sql).get(...args)||null;},async all(){return {results:sqlite.prepare(sql).all(...args)};},async run(){if(beforeWrite)await beforeWrite(sql,args);const result=sqlite.prepare(sql).run(...args);return {success:true,meta:{changes:Number(result.changes)}};}};}};
-globalThis.integrityTest={recordQuery,recordPage,RecordQueryError,schemas,purchaseRecordId,validPurchaseKey,samePurchaseInput,allowedSeller,getChatGPTUser:async()=>user,storage:async()=>({db})};
+globalThis.integrityTest={mutationGuard,recordQuery,recordPage,RecordQueryError,schemas,purchaseRecordId,validPurchaseKey,samePurchaseInput,allowedSeller,getChatGPTUser:async()=>user,storage:async()=>({db})};
 const source=readFileSync('app/api/records/route.ts','utf8').replace(/^import .*;\r?\n/gm,'');
-const setup='const {recordQuery,recordPage,RecordQueryError,schemas,purchaseRecordId,validPurchaseKey,samePurchaseInput,allowedSeller,getChatGPTUser,storage}=globalThis.integrityTest;';
+const setup='const {mutationGuard,recordQuery,recordPage,RecordQueryError,schemas,purchaseRecordId,validPurchaseKey,samePurchaseInput,allowedSeller,getChatGPTUser,storage}=globalThis.integrityTest;';
 const route=await import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(setup+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));
 const car={name:'Test car',year:2021,engine:'2.0',vin:'1HGCM82633A004352',mileage:0,nextService:0};
 function addCar(){const id=crypto.randomUUID();sqlite.prepare('INSERT INTO records VALUES (?,?,?,?,?)').run(id,'owner-a','car',JSON.stringify(car),1);return id;}
 const line={title:'Test part',part:'Test part',oem:'TEST123',quantity:1,dataMode:'inquiry',fitment:'unverified'};
 function payload(kind,carId){return kind==='expense'?{carId,title:'Repair',date:'2026-11-06',amount:10,mileage:100}:kind==='searchHistory'?{carId,vehicle:'Test car',problem:'Noise',parts:['Test part'],results:[],videos:[]}:{carId,lines:[line],note:'Test',status:'draft'};}
-function create(kind,carId,key){return route.POST(new Request('https://test/api/records',{method:'POST',headers:{'Content-Type':'application/json',...(key?{'Idempotency-Key':key}:{})},body:JSON.stringify({kind,data:payload(kind,carId)})}));}
-const remove=id=>route.DELETE(new Request('https://test/api/records?id='+id,{method:'DELETE'}));
+function create(kind,carId,key){return route.POST(new Request(MOTORNA_ORIGIN+'/api/records',{method:'POST',headers:{Origin:MOTORNA_ORIGIN,'Content-Type':'application/json',...(key?{'Idempotency-Key':key}:{})},body:JSON.stringify({kind,data:payload(kind,carId)})}));}
+const remove=id=>route.DELETE(new Request(MOTORNA_ORIGIN+'/api/records?id='+id,{method:'DELETE',headers:{Origin:MOTORNA_ORIGIN}}));
 function pauseWrite(predicate){let notify,release;const reached=new Promise(r=>notify=r),wait=new Promise(r=>release=r);beforeWrite=async(sql,args)=>{if(predicate(sql,args)){beforeWrite=undefined;notify();await wait;}};return {reached,release};}
 function assertNoOrphans(){assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM records AS child WHERE json_extract(child.payload,'$.carId') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM records AS parent WHERE parent.id=json_extract(child.payload,'$.carId') AND parent.owner=child.owner AND parent.kind='car')").get().n,0);}
 try{
@@ -37,7 +38,7 @@ try{
   assert.equal((await remove(child.id)).status,200);assert.equal((await remove(carId)).status,200);assert.equal((await create(kind,carId)).status,404);assert.equal((await remove(carId)).status,404);
  }
  const changing=addCar(),updateGate=pauseWrite(sql=>sql.startsWith('UPDATE records'));
- const patch=route.PATCH(new Request('https://test/api/records',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:changing,data:{...car,mileage:500}})}));await updateGate.reached;assert.equal((await remove(changing)).status,200);updateGate.release();assert.equal((await patch).status,404,'PATCH must not report an already deleted car as saved');
+ const patch=route.PATCH(new Request(MOTORNA_ORIGIN+'/api/records',{method:'PATCH',headers:{Origin:MOTORNA_ORIGIN,'Content-Type':'application/json'},body:JSON.stringify({id:changing,data:{...car,mileage:500}})}));await updateGate.reached;assert.equal((await remove(changing)).status,200);updateGate.release();assert.equal((await patch).status,404,'PATCH must not report an already deleted car as saved');
  const owned=addCar();user={userId:'owner-b'};assert.equal((await create('expense',owned)).status,404);assert.equal((await create('searchHistory',owned)).status,404);assert.equal((await create('purchaseRequest',owned,crypto.randomUUID())).status,404);assert.equal((await remove(owned)).status,404);assertNoOrphans();
  console.log('PASS: INSERT/DELETE races in both orders for expenses, history and keyed/unkeyed requests; 409 restrict, stale parents, owner isolation, no orphans');
 }finally{sqlite.close();delete globalThis.integrityTest;}

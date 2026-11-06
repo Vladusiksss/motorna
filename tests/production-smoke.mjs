@@ -8,5 +8,6 @@ for(const path of ['/','/garage','/requests'])assert.equal((await request(path))
 let response=await request('/api/health');assert.equal(response.status,200,'D1/R2 health');assert.equal(response.headers.get('cache-control'),'no-store');const health=await response.json();assert.deepEqual(health.checks,{database:'ok',files:'ok'});
 assert.equal((await request('/api/records')).status,401,'Anonymous private records must be refused');
 assert.equal((await request('/api/documents')).status,401,'Anonymous private documents must be refused');
-response=await request('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vehicle:'Test Honda Accord 2003',symptoms:'P0302',history:[]})});assert.equal(response.status,200);assert.match((await response.json()).note,/P0302/);
-console.log(JSON.stringify({status:'passed',checkedAt:new Date().toISOString(),site:base,checks:['public pages','D1/R2','anonymous access refusal','diagnostic API']},null,2));
+response=await request('/api/analyze',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({vehicle:'Test Honda Accord 2003',symptoms:'P0302',history:[]})});assert.equal(response.status,200);assert.match((await response.json()).note,/P0302/);
+for(const headers of [{},{Origin:'https://evil.test'},{Origin:base,'Sec-Fetch-Site':'same-site'}]){const denied=await request('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify({symptoms:'P0302'})});assert.equal(denied.status,403,'Origin/CSRF refusal');}
+console.log(JSON.stringify({status:'passed',checkedAt:new Date().toISOString(),site:base,checks:['public pages','D1/R2','anonymous access refusal','diagnostic API','Origin/CSRF refusal']},null,2));

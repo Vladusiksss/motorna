@@ -1,10 +1,11 @@
+import {mutationGuard} from '@/app/mutation-security';
 import {decodeVpic,VpicError} from '@/app/vpic';
 import {cleanIdentifier,type VehicleInfo} from '@/app/vehicle-search';
 import {getChatGPTUser} from '@/app/chatgpt-auth';
 import {storage} from '@/db/storage';
 export const dynamic='force-dynamic';
 export async function POST(request:Request){
- if(request.headers.get('sec-fetch-site')==='cross-site')return Response.json({error:'Недозволений запит'},{status:403});
+ const denied=mutationGuard(request);if(denied)return denied;
  let identifier:string;try{const text=await request.text();if(text.length>1000)throw new Error();const body=JSON.parse(text);if(typeof body.identifier!=='string')throw new Error();identifier=body.identifier;}catch{return Response.json({error:'Введіть VIN автомобіля.'},{status:400});}
  try{
   const vin=cleanIdentifier(identifier);

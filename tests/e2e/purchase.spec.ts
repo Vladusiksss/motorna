@@ -31,8 +31,8 @@ async function cleanup(page:Page,vin:string){
  const {records}=await response.json() as {records:{id:string;kind:string;data:{vin?:string;carId?:string}}[]};
  const cars=records.filter(r=>r.kind==='car'&&r.data.vin===vin);
  const ids=new Set(cars.map(r=>r.id));
- for(const row of records.filter(r=>r.kind!=='car'&&r.data.carId&&ids.has(r.data.carId))){expect((await page.request.delete('/api/records?id='+row.id)).ok()).toBeTruthy();}
- for(const car of cars)expect((await page.request.delete('/api/records?id='+car.id)).ok()).toBeTruthy();
+ for(const row of records.filter(r=>r.kind!=='car'&&r.data.carId&&ids.has(r.data.carId))){expect((await page.request.delete('/api/records?id='+row.id,{headers:{Origin:'http://localhost:5173'}})).ok()).toBeTruthy();}
+ for(const car of cars)expect((await page.request.delete('/api/records?id='+car.id,{headers:{Origin:'http://localhost:5173'}})).ok()).toBeTruthy();
 }
 test('VIN → car → article → filters → private request → reload → TXT',async({page},info)=>{
  const vin='JHMCM56543C'+String(Date.now()).slice(-6);
@@ -108,7 +108,7 @@ test('switching garage cars clears the previous public QR catalog',async({page})
   await addVehicle(page,vin);
   const {records}=await page.request.get('/api/records').then(r=>r.json()) as {records:{id:string;data:{vin?:string}}[]};
   const first=records.find(r=>r.data.vin===vin);expect(first).toBeTruthy();
-  const response=await page.request.post('/api/records',{data:{kind:'car',data:{name:'E2E Second Honda',make:'HONDA',model:'Accord',year:2004,engine:'3.0 Gasoline',vin:secondVin,mileage:100,nextService:1000}}});
+  const response=await page.request.post('/api/records',{headers:{Origin:'http://localhost:5173'},data:{kind:'car',data:{name:'E2E Second Honda',make:'HONDA',model:'Accord',year:2004,engine:'3.0 Gasoline',vin:secondVin,mileage:100,nextService:1000}}});
   expect(response.status()).toBe(201);
   const second=await response.json() as {record:{id:string}};
   // This fixture exercises client isolation, not publication of a real public share.

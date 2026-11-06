@@ -1,3 +1,4 @@
+import {mutationGuard} from '@/app/mutation-security';
 import {randomUUID} from 'node:crypto';
 import {acatRequest,catalogPath,catalogParts,type CatalogVehicle} from '@/app/autodealer';
 import {getChatGPTUser} from '@/app/chatgpt-auth';
@@ -12,7 +13,7 @@ const schema=z.object({carId:z.string().uuid(),session:z.string().uuid().optiona
 const headers={'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'};
 export async function POST(request:Request){
  const reply=(data:unknown,status=200)=>Response.json(data,{status,headers});
- if(request.headers.get('sec-fetch-site')==='cross-site')return reply({error:'Недозволений запит'},403);
+ const denied=mutationGuard(request);if(denied)return denied;
  const user=await getChatGPTUser();if(!user)return reply({error:'Увійдіть у кабінет.'},401);
  if(!process.env.AUTODEALER_TOKEN)return reply({error:'Каталог AutoDealer ще не активовано: потрібен токен постачальника.',code:'CATALOG_NOT_CONFIGURED'},503);
  let input:z.infer<typeof schema>;try{const raw=await request.text();if(raw.length>2000)throw Error();input=schema.parse(JSON.parse(raw));}catch{return reply({error:'Некоректний запит.'},400);}

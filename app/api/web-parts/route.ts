@@ -1,3 +1,4 @@
+import {mutationGuard} from '@/app/mutation-security';
 import {decodeVpic,VpicError} from '@/app/vpic';
 import {findOffers,matchesCatalogNumber} from '@/app/product-offers';
 import {getChatGPTUser} from '@/app/chatgpt-auth';
@@ -7,7 +8,7 @@ const schema=z.object({carId:z.string().uuid(),part:z.string().trim().min(2).max
 const cache=new Map<string,{at:number;data:unknown}>();
 export const dynamic='force-dynamic';
 export async function POST(request:Request){
- if(request.headers.get('sec-fetch-site')==='cross-site')return Response.json({error:'Недозволений запит'},{status:403});
+ const denied=mutationGuard(request);if(denied)return denied;
  const user=await getChatGPTUser();if(!user)return Response.json({error:'Увійдіть і підтвердьте автомобіль.'},{status:401});
  let data:z.infer<typeof schema>;try{const raw=await request.text();if(raw.length>2000)throw new Error();data=schema.parse(JSON.parse(raw));}catch{return Response.json({error:'Оберіть автомобіль у гаражі та вкажіть деталь.'},{status:400});}
  try{

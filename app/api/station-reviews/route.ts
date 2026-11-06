@@ -1,3 +1,4 @@
+import {mutationGuard} from '@/app/mutation-security';
 import {storage} from '@/db/storage';
 import {getChatGPTUser} from '@/app/chatgpt-auth';
 import {z} from 'zod';
@@ -9,7 +10,7 @@ export async function GET(request:Request){
  return Response.json({reviews:rows.results.map(r=>({author:r.author,rating:r.rating,text:r.text,updatedAt:r.updated_at,mine:r.owner===user?.userId}))});
  }catch{return Response.json({error:'Не вдалося завантажити відгуки.'},{status:400});}}
 export async function POST(request:Request){
- if(request.headers.get('sec-fetch-site')==='cross-site')return Response.json({error:'Недозволений запит'},{status:403});
+ const denied=mutationGuard(request);if(denied)return denied;
  const user=await getChatGPTUser();if(!user)return Response.json({error:'Увійдіть, щоб залишити відгук.'},{status:401});
  try{const raw=await request.text();if(raw.length>5000)throw Error();const d=z.object({station,rating:z.number().int().min(1).max(5),text:z.string().trim().min(10).max(1500),author:z.string().trim().min(2).max(60)}).parse(JSON.parse(raw));
  const db=await database();await db.prepare('INSERT INTO station_reviews(station,owner,author,rating,text,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(station,owner) DO UPDATE SET author=excluded.author,rating=excluded.rating,text=excluded.text,updated_at=excluded.updated_at').bind(d.station,user.userId,d.author,d.rating,d.text,new Date().toISOString()).run();return Response.json({ok:true});

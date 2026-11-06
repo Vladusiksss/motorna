@@ -5,7 +5,7 @@ if(!['localhost','127.0.0.1'].includes(new URL(base).hostname))throw new Error('
 const login=await fetch(base+'/signin-with-chatgpt?return_to=/',{redirect:'manual'});
 const cookie=login.headers.get('set-cookie')?.split(';')[0];assert.ok(cookie,'Local development sign-in');
 const created=[];
-async function api(path,method='GET',body,auth=true){return fetch(base+path,{method,headers:{'content-type':'application/json',...(auth?{cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});}
+async function api(path,method='GET',body,auth=true){return fetch(base+path,{method,headers:{Origin:base,'content-type':'application/json',...(auth?{cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});}
 async function create(kind,data){const response=await api('/api/records','POST',{kind,data});assert.equal(response.status,201,await response.clone().text());const {record}=await response.json();created.push(record.id);return record;}
 try{
  assert.equal((await api('/api/records','GET',undefined,false)).status,401);

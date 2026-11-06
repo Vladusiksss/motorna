@@ -1,3 +1,4 @@
+import {readJsonObject,jsonBodyFailure} from '@/app/json-body';
 import {mutationGuard} from '@/app/mutation-security';
 import {z} from 'zod';
 import {analyzeConversation} from '@/app/diagnostic-conversation';
@@ -6,6 +7,6 @@ const input=z.object({vehicle:z.string().min(2).max(200),symptoms:z.string().tri
 export async function POST(request:Request){
  const headers={'Cache-Control':'no-store'};
  const denied=mutationGuard(request);if(denied)return denied;
- try{const raw=await request.text();if(raw.length>32000)throw Error();const data=input.parse(JSON.parse(raw));return Response.json(analyzeConversation(data),{headers});}
- catch{return Response.json({error:'Опишіть, що змінилося в роботі авто.'},{status:400,headers});}
+ try{const bodyJson=await readJsonObject(request,32000);const data=input.parse(bodyJson);return Response.json(analyzeConversation(data),{headers});}
+ catch(error){const rejected=jsonBodyFailure(error);if(rejected)return rejected;return Response.json({error:'Опишіть, що змінилося в роботі авто.'},{status:400,headers});}
 }

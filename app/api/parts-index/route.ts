@@ -1,3 +1,4 @@
+import {readJsonObject,jsonBodyFailure} from '@/app/json-body';
 import {mutationGuard} from '@/app/mutation-security';
 import {randomUUID} from 'node:crypto';
 import {partsIndexCars,partsIndexResults} from '@/app/parts-index';
@@ -12,7 +13,7 @@ export async function POST(request:Request){
  const denied=mutationGuard(request);if(denied)return denied;
  const user=await getChatGPTUser();if(!user)return reply({error:'Увійдіть у кабінет.'},401);
  if(!process.env.PARTS_INDEX_API_KEY)return reply({error:'Parts Index не активовано. Потрібен API-ключ із доступом «Деталі за VIN».',code:'CATALOG_NOT_CONFIGURED'},503);
- let input:z.infer<typeof schema>;try{const raw=await request.text();if(raw.length>2000)throw Error();input=schema.parse(JSON.parse(raw));}catch{return reply({error:'Некоректний запит.'},400);}
+ let input:z.infer<typeof schema>;try{const bodyJson=await readJsonObject(request,2000);input=schema.parse(bodyJson);}catch(error){const rejected=jsonBodyFailure(error);if(rejected)return rejected;return reply({error:'Некоректний запит.'},400);}
  try{
  let id=input.session,s=id?sessions.get(id):undefined;
  if(input.action==='vin'){

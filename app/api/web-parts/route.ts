@@ -1,3 +1,4 @@
+import {readJsonObject,jsonBodyFailure} from '@/app/json-body';
 import {mutationGuard} from '@/app/mutation-security';
 import {decodeVpic,VpicError} from '@/app/vpic';
 import {findOffers,matchesCatalogNumber} from '@/app/product-offers';
@@ -10,7 +11,7 @@ export const dynamic='force-dynamic';
 export async function POST(request:Request){
  const denied=mutationGuard(request);if(denied)return denied;
  const user=await getChatGPTUser();if(!user)return Response.json({error:'Увійдіть і підтвердьте автомобіль.'},{status:401});
- let data:z.infer<typeof schema>;try{const raw=await request.text();if(raw.length>2000)throw new Error();data=schema.parse(JSON.parse(raw));}catch{return Response.json({error:'Оберіть автомобіль у гаражі та вкажіть деталь.'},{status:400});}
+ let data:z.infer<typeof schema>;try{const bodyJson=await readJsonObject(request,2000);data=schema.parse(bodyJson);}catch(error){const rejected=jsonBodyFailure(error);if(rejected)return rejected;return Response.json({error:'Оберіть автомобіль у гаражі та вкажіть деталь.'},{status:400});}
  try{
  const {db}=await storage();const row=await db.prepare("SELECT payload FROM records WHERE id=? AND owner=? AND kind='car'").bind(data.carId,user.userId).first();
  if(!row)return Response.json({error:'Автомобіль не знайдено у вашому гаражі.'},{status:404});

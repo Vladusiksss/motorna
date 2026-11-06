@@ -1,3 +1,4 @@
+import {readJsonObject,jsonBodyFailure} from '@/app/json-body';
 import {mutationGuard} from '@/app/mutation-security';
 import {usableStation,uniqueStations} from '@/app/station-quality';
 import {geocoderParameters,stationQuery,approximateDistance,uniqueAddresses,loadStationData} from '@/app/station-geography';
@@ -10,7 +11,7 @@ const input=z.union([z.object({address:z.string().trim().min(4).max(180)}),z.obj
 
 export async function POST(request:Request){
  const denied=mutationGuard(request);if(denied)return denied;
- let data:z.infer<typeof input>;try{const text=await request.text();if(text.length>1000)throw new Error();data=input.parse(JSON.parse(text));}catch{return Response.json({error:'Укажіть адресу в Україні.'},{status:400});}
+ let data:z.infer<typeof input>;try{const bodyJson=await readJsonObject(request,1000);data=input.parse(bodyJson);}catch(error){const rejected=jsonBodyFailure(error);if(rejected)return rejected;return Response.json({error:'Укажіть адресу в Україні.'},{status:400});}
  const key=JSON.stringify(data),cached=cache.get(key);if(cached&&Date.now()-cached.at<3600000)return Response.json(cached.value);
  const throttleKey='address' in data?'geocode':'stations';if(Date.now()-(lastRequest.get(throttleKey)||0)<1200)return Response.json({error:'Зачекайте кілька секунд і повторіть пошук.'},{status:429});lastRequest.set(throttleKey,Date.now());
  const cfg=await runtimeConfig();const headers={'User-Agent':'Motorna/1.0 (Ukraine vehicle service finder)'};

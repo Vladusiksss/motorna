@@ -1,3 +1,4 @@
+import {readJsonObject,jsonBodyFailure} from '../app/json-body.ts';
 import {mutationGuard,MOTORNA_ORIGIN} from '../app/mutation-security.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -19,8 +20,8 @@ const db={prepare(sql){let args=[];return {bind(...values){args=values;return th
 const objects=new Map();
 const bucket={async put(key,value){objects.set(key,new Uint8Array(value));},async get(key){const body=objects.get(key);return body?{body}:null;},async delete(key){objects.delete(key);}};
 let user={userId:'owner-a',displayName:'A',email:'a@example.test'};
-globalThis.securityTest={mutationGuard,recordQuery,recordPage,RecordQueryError,purchaseRecordId,validPurchaseKey,samePurchaseInput,schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser:async()=>user,storage:async()=>({db,bucket}),catalogDb:async()=>({db,bucket}),shareHeaders:{'Cache-Control':'no-store'}};
-async function route(path){const source=readFileSync(path,'utf8').replace(/^import .*;\r?\n/gm,'');const setup='const {mutationGuard,recordQuery,recordPage,RecordQueryError,purchaseRecordId,validPurchaseKey,samePurchaseInput,schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser,storage,catalogDb,shareHeaders}=globalThis.securityTest;\n';return import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(setup+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));}
+globalThis.securityTest={readJsonObject,jsonBodyFailure,mutationGuard,recordQuery,recordPage,RecordQueryError,purchaseRecordId,validPurchaseKey,samePurchaseInput,schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser:async()=>user,storage:async()=>({db,bucket}),catalogDb:async()=>({db,bucket}),shareHeaders:{'Cache-Control':'no-store'}};
+async function route(path){const source=readFileSync(path,'utf8').replace(/^import .*;\r?\n/gm,'');const setup='const {readJsonObject,jsonBodyFailure,mutationGuard,recordQuery,recordPage,RecordQueryError,purchaseRecordId,validPurchaseKey,samePurchaseInput,schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser,storage,catalogDb,shareHeaders}=globalThis.securityTest;\n';return import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(setup+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));}
 const records=await route('app/api/records/route.ts'),documents=await route('app/api/documents/route.ts'),document=await route('app/api/documents/[id]/route.ts'),requests=await route('app/api/purchase-request/[id]/route.ts'),shares=await route('app/api/car-catalog/route.ts'),publicShare=await route('app/api/shared-car/[token]/route.ts');
 const carA=crypto.randomUUID(),carB=crypto.randomUUID();
 const car={name:'TEST Honda',year:2003,engine:'3.0',vin:'1HGCM82633A004352',mileage:100,nextService:200};
@@ -32,6 +33,16 @@ function upload(carId,content=png,type='image/png'){const form=new FormData();fo
 try{
  assert.equal((await records.GET()).headers.get('cache-control'),'private, no-store');
  assert.equal((await documents.GET()).headers.get('cache-control'),'private, no-store');
+ // Oversized and malformed request bodies are rejected before writes, including dishonest headers.
+ const initial=sqlite.prepare('SELECT COUNT(*) AS n FROM records').get().n;
+ for(const method of ['POST','PATCH']){
+  const request=new Request(MOTORNA_ORIGIN+'/api/records',{method,headers:{Origin:MOTORNA_ORIGIN,'Content-Type':'application/json','Content-Length':'1'},body:JSON.stringify({padding:'x'.repeat(60000)})});
+  const response=await records[method](request);assert.equal(response.status,413);assert.equal((await response.json()).code,'JSON_BODY_TOO_LARGE');
+ }
+ assert.equal((await records.POST(new Request(MOTORNA_ORIGIN+'/api/records',{method:'POST',headers:{Origin:MOTORNA_ORIGIN,'Content-Type':'application/json'},body:'{'}))).status,400);
+ assert.equal((await shares.POST(json('api/car-catalog',{padding:'x'.repeat(10000)}))).status,413);
+ assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM records').get().n,initial);
+ assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM car_shares').get().n,0);
  let response=await documents.POST(upload(carA));assert.equal(response.status,201);const docA=(await response.json()).document.id;
  assert.equal((await documents.POST(upload(carA,Buffer.from('<html>not a PNG</html>')))).status,400);
  assert.equal((await documents.POST(upload(carA,Buffer.alloc(5*1024*1024+1)))).status,400);

@@ -1,3 +1,4 @@
+import {readJsonObject,jsonBodyFailure} from '@/app/json-body';
 import {mutationGuard} from '@/app/mutation-security';
 import {storage} from '@/db/storage';
 import {getChatGPTUser} from '@/app/chatgpt-auth';
@@ -12,6 +13,6 @@ export async function GET(request:Request){
 export async function POST(request:Request){
  const denied=mutationGuard(request);if(denied)return denied;
  const user=await getChatGPTUser();if(!user)return Response.json({error:'Увійдіть, щоб залишити відгук.'},{status:401});
- try{const raw=await request.text();if(raw.length>5000)throw Error();const d=z.object({station,rating:z.number().int().min(1).max(5),text:z.string().trim().min(10).max(1500),author:z.string().trim().min(2).max(60)}).parse(JSON.parse(raw));
+ try{const bodyJson=await readJsonObject(request,5000);const d=z.object({station,rating:z.number().int().min(1).max(5),text:z.string().trim().min(10).max(1500),author:z.string().trim().min(2).max(60)}).parse(bodyJson);
  const db=await database();await db.prepare('INSERT INTO station_reviews(station,owner,author,rating,text,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(station,owner) DO UPDATE SET author=excluded.author,rating=excluded.rating,text=excluded.text,updated_at=excluded.updated_at').bind(d.station,user.userId,d.author,d.rating,d.text,new Date().toISOString()).run();return Response.json({ok:true});
- }catch{return Response.json({error:'Вкажіть ім’я, оцінку 1–5 та відгук від 10 до 1500 символів.'},{status:400});}}
+ }catch(error){const rejected=jsonBodyFailure(error);if(rejected)return rejected;return Response.json({error:'Вкажіть ім’я, оцінку 1–5 та відгук від 10 до 1500 символів.'},{status:400});}}

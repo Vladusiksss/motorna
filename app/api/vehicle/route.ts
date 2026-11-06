@@ -1,3 +1,4 @@
+import {readJsonObject,jsonBodyFailure} from '@/app/json-body';
 import {mutationGuard} from '@/app/mutation-security';
 import {decodeVpic,VpicError} from '@/app/vpic';
 import {cleanIdentifier,type VehicleInfo} from '@/app/vehicle-search';
@@ -6,7 +7,7 @@ import {storage} from '@/db/storage';
 export const dynamic='force-dynamic';
 export async function POST(request:Request){
  const denied=mutationGuard(request);if(denied)return denied;
- let identifier:string;try{const text=await request.text();if(text.length>1000)throw new Error();const body=JSON.parse(text);if(typeof body.identifier!=='string')throw new Error();identifier=body.identifier;}catch{return Response.json({error:'Введіть VIN автомобіля.'},{status:400});}
+ let identifier:string;try{const bodyJson=await readJsonObject(request,1000);const body=bodyJson;if(typeof body.identifier!=='string')throw new Error();identifier=body.identifier;}catch(error){const rejected=jsonBodyFailure(error);if(rejected)return rejected;return Response.json({error:'Введіть VIN автомобіля.'},{status:400});}
  try{
   const vin=cleanIdentifier(identifier);
   if(!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin))throw new VpicError('Перевірте 17 символів VIN.',400);

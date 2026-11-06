@@ -61,3 +61,6 @@ __pycache__/
 # Browser test outputs
 /playwright-report/
 /test-results/
+
+# Private financial migration snapshots, reports and rollback payloads
+/.money-migration/

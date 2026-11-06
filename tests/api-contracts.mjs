@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {analysisSchema,reviewSchema,photosSchema,stationSchema,readApi} from '../app/api-contracts.ts';
+import {graph} from '../app/json-graph.ts';
+const cause={title:'Check',explanation:'Possible cause',check:'Inspect',condition:'Under load',evidence:'Symptom',parts:['Part']};
+assert.equal(analysisSchema.parse({causes:[cause],note:'Note'}).questions.length,0);
+assert.equal(analysisSchema.safeParse({causes:[{...cause,parts:'wrong'}],note:'Note'}).success,false);
+const review={author:'Test',rating:5,text:'Review',updatedAt:'2026-11-06T10:00:00.000Z'};
+assert.equal(reviewSchema.parse(review).rating,5);
+for(const rating of [-1,1.5,6])assert.equal(reviewSchema.safeParse({...review,rating}).success,false);
+assert.equal(photosSchema.parse({photos:[]}).photos.length,0);
+assert.equal(photosSchema.safeParse({photos:[{url:42}]}).success,false);
+assert.equal(stationSchema.safeParse({name:'Only a name'}).success,false);
+assert.deepEqual(graph(null),[]);
+assert.deepEqual(graph({'@graph':[null,{name:'car'}],mainEntity:{name:'detail'}}).map(r=>r.name).filter(Boolean),['car','detail']);
+assert.deepEqual(await readApi(Response.json({photos:[]})),{photos:[]});
+await assert.rejects(()=>readApi(Response.json({error:'Source unavailable'},{status:503})),/Source unavailable/);
+console.log('PASS: malformed external payloads, rating bounds, nested JSON-LD and API errors');

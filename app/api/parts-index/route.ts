@@ -4,10 +4,10 @@ import {getChatGPTUser} from '@/app/chatgpt-auth';
 import {storage} from '@/db/storage';
 import {z} from 'zod';
 export const dynamic='force-dynamic';
-const sessions=new Map<string,{owner:string;carId:string;expires:number;cars:Awaited<ReturnType<typeof partsIndexCars>>;selected?:number;parts:any[]}>();
+const sessions=new Map<string,{owner:string;carId:string;expires:number;cars:Awaited<ReturnType<typeof partsIndexCars>>;selected?:number;parts:{number:string;name:string;description:string;notice:string}[]}>();
 const schema=z.object({carId:z.string().uuid(),session:z.string().uuid().optional(),action:z.enum(['vin','vehicle','root','part']),index:z.number().int().min(0).max(100000).optional()});
 export async function POST(request:Request){
- const reply=(d:any,status=200)=>Response.json(d,{status,headers:{'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'}});
+ const reply=(d:unknown,status=200)=>Response.json(d,{status,headers:{'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'}});
  if(request.headers.get('sec-fetch-site')==='cross-site')return reply({error:'Недозволений запит'},403);
  const user=await getChatGPTUser();if(!user)return reply({error:'Увійдіть у кабінет.'},401);
  if(!process.env.PARTS_INDEX_API_KEY)return reply({error:'Parts Index не активовано. Потрібен API-ключ із доступом «Деталі за VIN».',code:'CATALOG_NOT_CONFIGURED'},503);

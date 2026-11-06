@@ -1,0 +1,2 @@
+export function object(value:unknown):Record<string,unknown>{return value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};}
+export function graph(value:unknown):Record<string,unknown>[]{if(Array.isArray(value))return value.flatMap(graph);if(!value||typeof value!=='object')return [];const row=object(value);return [row,...graph(row['@graph']),...graph(row.mainEntity)];}

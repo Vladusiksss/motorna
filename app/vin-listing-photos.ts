@@ -1,19 +1,19 @@
+import {graph,object} from './json-graph';
 import {decodeEntities,parseWebResults} from './vehicle-search';
 export type ListingPhoto={url:string;source:string;host:string;title:string;vin:string;checkedAt:string};
 const hosts=['auto.ria.com','rst.ua','avtopoisk.ua','bid.cars','stat.vin','autoauctionhistory.com'];
 export function allowedListing(value:string){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&hosts.some(h=>u.hostname===h||u.hostname.endsWith('.'+h));}catch{return false;}}
 function safeImage(value:unknown,source:string){try{if(typeof value!=='string')return '';const u=new URL(decodeEntities(value),source);const trusted=[...hosts,'cdn.riastatic.com','riastatic.com','img.rst.ua','bidfax.info'];return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&trusted.some(h=>u.hostname===h||u.hostname.endsWith('.'+h))?u.href:'';}catch{return '';}}
 function attributes(tag:string){return Object.fromEntries([...tag.matchAll(/([\w:-]+)\s*=\s*["']([^"']*)["']/g)].map(m=>[m[1].toLowerCase(),decodeEntities(m[2])]));}
-function graph(value:any):any[]{if(Array.isArray(value))return value.flatMap(graph);if(!value||typeof value!=='object')return [];return [value,...graph(value['@graph']),...graph(value.mainEntity)];}
 export function extractListingPhotos(html:string,source:string,vin:string):ListingPhoto[]{
  if(!allowedListing(source)||!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin))return [];
  const photos:ListingPhoto[]=[];
  const add=(image:unknown,title:string)=>{const url=safeImage(image,source);if(url&&!photos.some(p=>p.url===url))photos.push({url,source,host:new URL(source).hostname,title:decodeEntities(title).replace(/<[^>]*>/g,'').slice(0,200),vin,checkedAt:new Date().toISOString()});};
  // Images must belong to the same structured vehicle as the exact VIN.
  for(const m of html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)){
- try{for(const item of graph(JSON.parse(m[1]))){if(![item['@type']].flat().some(t=>['Car','Vehicle','Product'].includes(t)))continue;
+ try{for(const item of graph(JSON.parse(m[1]))){if(![item['@type']].flat().some(t=>typeof t==='string'&&['Car','Vehicle','Product'].includes(t)))continue;
  if(String(item.vehicleIdentificationNumber||'').toUpperCase().trim()!==vin)continue;
- for(const image of [item.image].flat())add(typeof image==='string'?image:image?.contentUrl||image?.url,item.name||'Оголошення про автомобіль');}}catch{}
+ for(const image of [item.image].flat())add(typeof image==='string'?image:object(image).contentUrl||object(image).url,typeof item.name==='string'?item.name:'Оголошення про автомобіль');}}catch{}
  }
  if(photos.length)return photos.slice(0,8);
  // Fallback only for a detail page whose primary heading/title identifies the VIN.

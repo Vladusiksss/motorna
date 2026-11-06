@@ -1,3 +1,4 @@
+import {z} from 'zod';
 import {verifiedModelPhoto} from '@/app/verified-model-photos';
 import {findWebModelPhotos} from '@/app/web-model-photos';
 import {photoMatches,photoYearMatches,photoQuery,plain,type PhotoRequest} from '@/app/vehicle-photo-search';
@@ -12,8 +13,8 @@ export async function GET(request:Request){
  try{
  const query=new URLSearchParams({action:'query',format:'json',generator:'search',gsrsearch:`${p.make} (${p.model} OR "${p.model.replace(/([A-Za-z])(\d)/g,'$1 $2')}") ${p.year}`,gsrnamespace:'6',gsrlimit:'24',prop:'imageinfo',iiprop:'url|extmetadata|mime',iiurlwidth:'960'});
  const response=await fetch('https://commons.wikimedia.org/w/api.php?'+query,{headers:{'User-Agent':'Motorna/1.0 (vehicle illustration lookup; local development)'},signal:AbortSignal.timeout(12000)});
- if(!response.ok)throw new Error('source');const data:any=await response.json();
- let photos:any[]=Object.values(data.query?.pages||{}).flatMap((page:any)=>{
+ if(!response.ok)throw new Error('source');const pageSchema=z.object({title:z.string(),imageinfo:z.array(z.object({mime:z.string().optional(),url:z.string(),thumburl:z.string().optional(),descriptionurl:z.string(),extmetadata:z.record(z.string(),z.object({value:z.string().optional()})).optional()})).optional()});const data=z.object({query:z.object({pages:z.record(z.string(),pageSchema)}).optional()}).parse(await response.json());
+ const commons=Object.values(data.query?.pages||{}).flatMap(page=>{
  const info=page.imageinfo?.[0],meta=info?.extmetadata||{};
  if(!info||!/^image\/(jpeg|png|webp)$/.test(info.mime||''))return [];
  const description=plain(meta.ImageDescription?.value),text=[page.title,description,plain(meta.Categories?.value)].join(' ');
@@ -22,8 +23,8 @@ export async function GET(request:Request){
  if(!/CC BY|CC0|Public domain/i.test(license)||!author)return [];
  try{const image=new URL(info.thumburl||info.url),source=new URL(info.descriptionurl);if(image.protocol!=='https:'||!['upload.wikimedia.org','thumb.wikimedia.org'].includes(image.hostname)||source.protocol!=='https:'||source.hostname!=='commons.wikimedia.org')return [];
  return [{url:image.href,source:source.href,author,license,title:plain(page.title).replace(/^File:/,''),description,yearMentioned:text.includes(p.year)}];}catch{return [];}
- }).sort((a:any,b:any)=>Number(b.yearMentioned)-Number(a.yearMentioned)).slice(0,3);
- const web=await webPromise;photos=[...web.photos,...photos,...(reviewed?[reviewed]:[])].slice(0,3);
+ }).sort((a,b)=>Number(b.yearMentioned)-Number(a.yearMentioned)).slice(0,3);
+ const web=await webPromise;const photos=[...web.photos,...commons,...(reviewed?[reviewed]:[])].slice(0,3);
  if(cache.size>=200)cache.delete(cache.keys().next().value!);cache.set(key,{at:Date.now(),photos});return Response.json({photos},{headers:{'Cache-Control':'private, max-age=3600'}});
  }catch{const web=await webPromise;if(web.photos.length||reviewed)return Response.json({photos:web.photos.length?web.photos:[reviewed]});return Response.json({error:'Фото тимчасово недоступне',photos:[]},{status:503});}
 }

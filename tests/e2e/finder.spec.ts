@@ -1,0 +1,18 @@
+import {test,expect,type Page} from '@playwright/test';
+async function clean(page:Page,vin:string){const response=await page.request.get('/api/records');if(!response.ok())return;const {records}=await response.json();const cars=records.filter((r:{kind:string;data:{vin?:string}})=>r.kind==='car'&&r.data.vin===vin);const ids=new Set(cars.map((c:{id:string})=>c.id));for(const record of records.filter((r:{kind:string;data:{carId?:string}})=>r.kind!=='car'&&ids.has(r.data.carId)))await page.request.delete('/api/records?id='+record.id);for(const car of cars)await page.request.delete('/api/records?id='+car.id);}
+test.beforeEach(async({page})=>{await page.route('**/api/vin-photos',r=>r.fulfill({json:{photos:[]}}));await page.route('**/api/vehicle-image?*',r=>r.fulfill({json:{photos:[]}}));});
+test('pending confirmed vehicle resumes after sign-in without losing VIN',async({page})=>{
+ const vin='JHMCM56543C'+String(Date.now()).slice(-6);const vehicle={vin,make:'HONDA',model:'Accord',year:'2003',engine:'3.0 Gasoline',fields:[],source:'E2E fixture',warning:'',checkedAt:new Date().toISOString()};
+ await page.addInitScript(({vehicle})=>{if(!sessionStorage.getItem('resume-fixture-set')){sessionStorage.setItem('motorna-pending-car',JSON.stringify({vehicle,at:Date.now()}));sessionStorage.setItem('resume-fixture-set','1');}},{vehicle});
+ try{await page.goto('/signin-with-chatgpt?return_to=/');await expect(page.getByText('Збережено в гаражі',{exact:true})).toBeVisible();const response=await page.request.get('/api/records');const {records}=await response.json();expect(records.filter((r:{kind:string;data:{vin?:string}})=>r.kind==='car'&&r.data.vin===vin)).toHaveLength(1);await page.reload();await expect(page.getByText('Збережено в гаражі',{exact:true})).toBeVisible();}finally{await clean(page,vin);}
+});
+test('global article and symptom commands retain selected vehicle',async({page})=>{
+ const vin='JHMCM56543C'+String(Date.now()).slice(-6);
+ try{
+ await page.goto('/signin-with-chatgpt?return_to=/');const response=await page.request.post('/api/records',{data:{kind:'car',data:{name:'E2E Honda Accord',make:'HONDA',model:'Accord',year:2003,engine:'3.0',vin,mileage:100,nextService:0}}});expect(response.status()).toBe(201);const {record}=await response.json();
+ await page.addInitScript(id=>localStorage.setItem('motorna-active-car',id),record.id);await page.reload();await expect(page.getByText('Збережено в гаражі',{exact:true})).toBeVisible();
+ await page.route('**/api/web-parts',async route=>{expect(route.request().postDataJSON()).toMatchObject({carId:record.id,oem:'GDB3373'});await route.fulfill({json:{results:[{title:'TRW GDB3373 fixture',url:'https://prom.ua/ua/p999999001-e2e.html',host:'prom.ua',price:1000,currency:'UAH',dataMode:'live'}]}});});
+ await page.getByRole('button',{name:'Запчастина',exact:true}).click();await page.getByRole('combobox',{name:'Назва деталі або артикул',exact:true}).fill('GDB3373');await page.locator('.unified-search').getByRole('button',{name:'Знайти',exact:true}).click();await expect(page.locator('.refreshed-offer')).toHaveCount(1);
+ await page.getByRole('button',{name:'Симптоми',exact:true}).click();await page.getByRole('textbox',{name:'Опис симптомів',exact:true}).fill('стукає двигун');await page.locator('.unified-search').getByRole('button',{name:'Знайти',exact:true}).click();await expect(page.getByRole('textbox',{name:'Що сталося?',exact:true})).toHaveValue('стукає двигун');await page.getByRole('button',{name:'Проаналізувати опис',exact:true}).click();await expect(page.locator('.cause-card').first()).toBeVisible();
+ }finally{await clean(page,vin);}
+});

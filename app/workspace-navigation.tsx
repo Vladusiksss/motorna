@@ -1,4 +1,5 @@
 "use client";
+import Link from 'next/link';
 import {useState} from 'react';
 import {Search,CarFront,MapPin,Heart,UserRound,Wrench,Menu,ShoppingBag} from 'lucide-react';
 import {Sheet,SheetContent,SheetTitle,SheetDescription} from '@/components/ui/sheet';
@@ -18,8 +19,8 @@ export default function WorkspaceNavigation({section,navigate,name,requestCount=
  return <>
   <header className="topbar refreshed-header">
    <button className="menu-toggle icon-btn" onClick={()=>setOpen(true)} aria-label="Відкрити меню" aria-expanded={open}><Menu size={22}/></button>
-   <a className="brand" href="/" onClick={e=>{e.preventDefault();go('parts');}}>моторна<span>.</span></a>
-   <nav aria-label="Головна навігація">{[['parts','Запчастини'],['garage','Мій гараж'],['service','СТО та ремонт']].map(([id,label])=><a key={id} className={section===id?'active':''} aria-current={section===id?'page':undefined} href={id==='parts'?'/':'/'+id} onClick={e=>{e.preventDefault();go(id);}}>{label}</a>)}</nav>
+   <Link prefetch={false} className="brand" href="/" onClick={e=>{e.preventDefault();go('parts');}}>моторна<span>.</span></Link>
+   <nav aria-label="Головна навігація">{[['parts','Запчастини'],['garage','Мій гараж'],['service','СТО та ремонт']].map(([id,label])=><Link prefetch={false} key={id} className={section===id?'active':''} aria-current={section===id?'page':undefined} href={id==='parts'?'/':'/'+id} onClick={e=>{e.preventDefault();go(id);}}>{label}</Link>)}</nav>
    <div className="header-actions"><button className="icon-btn request-counter" aria-label={'Запити на купівлю: '+requestCount} onClick={()=>go('requests')}><ShoppingBag size={20}/>{requestCount>0&&<span>{requestCount}</span>}</button><button className={'icon-btn '+(section==='favorites'?'selected':'')} aria-label="Обране" onClick={()=>go('favorites')}><Heart size={20}/></button><button className="avatar" aria-label="Профіль" onClick={()=>go('profile')}><UserRound size={19}/></button></div>
   </header>
   <aside className="desktop-sidebar"><div className="sidebar-account"><UserRound size={24}/><strong>{name||'Ваш автопростір'}</strong><small>Уся Україна</small></div>{navigation()}<div className="sidebar-tip"><Wrench size={24}/><strong>Догляд без зайвих турбот</strong><p>Зберігайте авто, чеки та історію обслуговування в одному місці.</p><button onClick={()=>go('garage')}>До гаража →</button></div></aside>

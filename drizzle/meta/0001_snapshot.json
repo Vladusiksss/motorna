@@ -1,0 +1,187 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "ded4a1ab-f95a-486c-b4de-a0c3e369f1f1",
+  "prevId": "9c18a5cd-b939-4d67-82a1-91c7ba62e785",
+  "tables": {
+    "documents": {
+      "name": "documents",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner": {
+          "name": "owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "mime": {
+          "name": "mime",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "size": {
+          "name": "size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created": {
+          "name": "created",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_documents_owner": {
+          "name": "idx_documents_owner",
+          "columns": [
+            "owner"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "records": {
+      "name": "records",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner": {
+          "name": "owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload": {
+          "name": "payload",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created": {
+          "name": "created",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_records_owner_kind": {
+          "name": "idx_records_owner_kind",
+          "columns": [
+            "owner",
+            "kind"
+          ],
+          "isUnique": false
+        },
+        "idx_records_owner_created_id": {
+          "name": "idx_records_owner_created_id",
+          "columns": [
+            "owner",
+            "created",
+            "id"
+          ],
+          "isUnique": false
+        },
+        "idx_records_owner_kind_created_id": {
+          "name": "idx_records_owner_kind_created_id",
+          "columns": [
+            "owner",
+            "kind",
+            "created",
+            "id"
+          ],
+          "isUnique": false
+        },
+        "idx_records_owner_car_created_id": {
+          "name": "idx_records_owner_car_created_id",
+          "columns": [
+            "owner",
+            "json_extract(payload, '$.carId')",
+            "created",
+            "id"
+          ],
+          "isUnique": false
+        },
+        "idx_records_owner_kind_car_created_id": {
+          "name": "idx_records_owner_kind_car_created_id",
+          "columns": [
+            "owner",
+            "kind",
+            "json_extract(payload, '$.carId')",
+            "created",
+            "id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {
+      "idx_records_owner_car_created_id": {
+        "columns": {
+          "json_extract(payload, '$.carId')": {
+            "isExpression": true
+          }
+        }
+      },
+      "idx_records_owner_kind_car_created_id": {
+        "columns": {
+          "json_extract(payload, '$.carId')": {
+            "isExpression": true
+          }
+        }
+      }
+    }
+  }
+}

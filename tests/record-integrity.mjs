@@ -5,14 +5,15 @@ import {registerHooks} from 'node:module';
 import ts from 'typescript';
 registerHooks({resolve(s,c,next){try{return next(s,c);}catch(e){if(s.startsWith('.')&&!s.endsWith('.ts'))return next(s+'.ts',c);throw e;}}});
 const {schemas}=await import('../app/validation.ts');
+const {recordQuery,recordPage,RecordQueryError}=await import('../app/record-query.ts');
 const {purchaseRecordId,validPurchaseKey,samePurchaseInput}=await import('../app/purchase-idempotency.ts');
 const {allowedSeller}=await import('../app/product-offers.ts');
 const sqlite=new DatabaseSync(':memory:');sqlite.exec(readFileSync('drizzle/0000_conscious_richard_fisk.sql','utf8'));
 let user={userId:'owner-a'},beforeWrite;
 const db={prepare(sql){let args=[];return {bind(...v){args=v;return this;},async first(){return sqlite.prepare(sql).get(...args)||null;},async all(){return {results:sqlite.prepare(sql).all(...args)};},async run(){if(beforeWrite)await beforeWrite(sql,args);const result=sqlite.prepare(sql).run(...args);return {success:true,meta:{changes:Number(result.changes)}};}};}};
-globalThis.integrityTest={schemas,purchaseRecordId,validPurchaseKey,samePurchaseInput,allowedSeller,getChatGPTUser:async()=>user,storage:async()=>({db})};
+globalThis.integrityTest={recordQuery,recordPage,RecordQueryError,schemas,purchaseRecordId,validPurchaseKey,samePurchaseInput,allowedSeller,getChatGPTUser:async()=>user,storage:async()=>({db})};
 const source=readFileSync('app/api/records/route.ts','utf8').replace(/^import .*;\r?\n/gm,'');
-const setup='const {schemas,purchaseRecordId,validPurchaseKey,samePurchaseInput,allowedSeller,getChatGPTUser,storage}=globalThis.integrityTest;';
+const setup='const {recordQuery,recordPage,RecordQueryError,schemas,purchaseRecordId,validPurchaseKey,samePurchaseInput,allowedSeller,getChatGPTUser,storage}=globalThis.integrityTest;';
 const route=await import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(setup+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));
 const car={name:'Test car',year:2021,engine:'2.0',vin:'1HGCM82633A004352',mileage:0,nextService:0};
 function addCar(){const id=crypto.randomUUID();sqlite.prepare('INSERT INTO records VALUES (?,?,?,?,?)').run(id,'owner-a','car',JSON.stringify(car),1);return id;}

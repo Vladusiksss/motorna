@@ -1,5 +1,5 @@
+import {sql} from 'drizzle-orm';
 import { sqliteTable,text,integer,index } from 'drizzle-orm/sqlite-core';
-export const records=sqliteTable('records',{id:text('id').primaryKey(),owner:text('owner').notNull(),kind:text('kind').notNull(),payload:text('payload').notNull(),created:integer('created').notNull()},t=>[index('idx_records_owner_kind').on(t.owner,t.kind)]);
+export const records=sqliteTable('records',{id:text('id').primaryKey(),owner:text('owner').notNull(),kind:text('kind').notNull(),payload:text('payload').notNull(),created:integer('created').notNull()},t=>[index('idx_records_owner_kind').on(t.owner,t.kind),index('idx_records_owner_created_id').on(t.owner,t.created,t.id),index('idx_records_owner_kind_created_id').on(t.owner,t.kind,t.created,t.id),index('idx_records_owner_car_created_id').on(t.owner,sql`json_extract(payload, '$.carId')`,t.created,t.id),index('idx_records_owner_kind_car_created_id').on(t.owner,t.kind,sql`json_extract(payload, '$.carId')`,t.created,t.id)]);
 export const documents=sqliteTable('documents',{id:text('id').primaryKey(),owner:text('owner').notNull(),name:text('name').notNull(),mime:text('mime').notNull(),size:integer('size').notNull(),created:integer('created').notNull()},t=>[index('idx_documents_owner').on(t.owner)]);
 
-export const vinDecodeCache=sqliteTable('vin_decode_cache',{vin:text('vin').primaryKey(),payload:text('payload').notNull(),expiresAt:integer('expires_at').notNull()});

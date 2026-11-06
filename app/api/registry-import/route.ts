@@ -1,8 +1,11 @@
+import {apiBoundary} from '@/app/api-response';
 import {mutationGuard} from '@/app/mutation-security';
 import {runtimeConfig} from '@/app/runtime-config';
 import {storage} from '@/db/storage';
 export const dynamic='force-dynamic';
 export async function PUT(request:Request){
+ return apiBoundary(async()=>{
+
  const env=await runtimeConfig();
  if(!env.REGISTRY_IMPORT_TOKEN||request.headers.get('x-motorna-import-key')!==env.REGISTRY_IMPORT_TOKEN)return new Response(null,{status:403});
  const denied=mutationGuard(request,{format:'gzip',allowMachine:true});if(denied)return denied;
@@ -19,4 +22,6 @@ export async function PUT(request:Request){
   await bucket.put('vehicle-registry/mvs-v1/'+shard+'.gz',data,{httpMetadata:{contentType:'application/gzip'}});
   return Response.json({shard,bytes:length});
  }catch{return new Response(null,{status:503});}
+
+ },"/api/registry-import");
 }

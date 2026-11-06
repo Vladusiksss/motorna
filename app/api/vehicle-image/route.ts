@@ -1,3 +1,4 @@
+import {apiBoundary} from '@/app/api-response';
 import {z} from 'zod';
 import {verifiedModelPhoto} from '@/app/verified-model-photos';
 import {findWebModelPhotos} from '@/app/web-model-photos';
@@ -5,6 +6,8 @@ import {photoMatches,photoYearMatches,photoQuery,plain,type PhotoRequest} from '
 export const dynamic='force-dynamic';
 const cache=new Map<string,{at:number;photos:unknown[]}>();
 export async function GET(request:Request){
+ return apiBoundary(async()=>{
+
  const url=new URL(request.url),p=Object.fromEntries(['make','model','year','body','color'].map(k=>[k,(url.searchParams.get(k)||'').trim()])) as PhotoRequest;
  if(!/^[\p{L}\p{N} .-]{1,50}$/u.test(p.make)||!/^[\p{L}\p{N} .-]{1,70}$/u.test(p.model)||!/^\d{4}$/.test(p.year)||!/^#[a-f0-9]{6}$/i.test(p.color)||!/^$|^(sedan|suv|wagon|hatch|coupe|convertible|pickup|van)$/.test(p.body))return Response.json({error:'Недостатньо даних авто',photos:[]},{status:400});
  const reviewed=verifiedModelPhoto(p);
@@ -27,4 +30,6 @@ export async function GET(request:Request){
  const web=await webPromise;const photos=[...web.photos,...commons,...(reviewed?[reviewed]:[])].slice(0,3);
  if(cache.size>=200)cache.delete(cache.keys().next().value!);cache.set(key,{at:Date.now(),photos});return Response.json({photos},{headers:{'Cache-Control':'private, max-age=3600'}});
  }catch{const web=await webPromise;if(web.photos.length||reviewed)return Response.json({photos:web.photos.length?web.photos:[reviewed]});return Response.json({error:'Фото тимчасово недоступне',photos:[]},{status:503});}
+
+ },"/api/vehicle-image");
 }

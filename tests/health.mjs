@@ -1,10 +1,11 @@
+import {apiBoundary} from '../app/api-response.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 let fail=false,calls=0;
-globalThis.healthTest={storage:async()=>{calls++;return {db:{prepare(){return {all:async()=>{if(fail)throw Error('private database details');return {results:[]};}};}},bucket:{get:async key=>{assert.match(key,/^_health\//);if(fail)throw Error('private storage details');return null;}}};}};
+globalThis.healthTest={apiBoundary,storage:async()=>{calls++;return {db:{prepare(){return {all:async()=>{if(fail)throw Error('private database details');return {results:[]};}};}},bucket:{get:async key=>{assert.match(key,/^_health\//);if(fail)throw Error('private storage details');return null;}}};}};
 const source=readFileSync('app/api/health/route.ts','utf8').replace(/^import .*;\r?\n/gm,'');
-const compiled=ts.transpileModule('const {storage}=globalThis.healthTest;\n'+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
+const compiled=ts.transpileModule('const {apiBoundary,storage}=globalThis.healthTest;\n'+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
 const route=await import('data:text/javascript;base64,'+Buffer.from(compiled).toString('base64'));
 const clock=Date.now;
 try{

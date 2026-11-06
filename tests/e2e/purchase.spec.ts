@@ -91,7 +91,7 @@ test('unavailable upstream → honest empty state → inquiry without price',asy
  const vin='JHMCM56543C'+String(Date.now()).slice(-6);
  try{
   await addVehicle(page,vin);
-  await page.route('**/api/web-parts',route=>route.fulfill({status:503,json:{error:'E2E upstream unavailable'}}));
+  await page.route('**/api/web-parts',route=>route.fulfill({status:503,json:{code:'SEARCH_UNAVAILABLE',message:'E2E upstream unavailable',requestId:'00000000-0000-4000-8000-000000000001'}}));
   await page.getByRole('button',{name:'Знайти пропозиції для авто',exact:true}).click();
   await expect(page.locator('.refreshed-offer')).toHaveCount(0);
   await expect(page.getByText('E2E upstream unavailable',{exact:true})).toBeVisible();

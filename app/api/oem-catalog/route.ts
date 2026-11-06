@@ -1,3 +1,4 @@
+import {apiBoundary} from '@/app/api-response';
 import {readJsonObject,jsonBodyFailure} from '@/app/json-body';
 import {mutationGuard} from '@/app/mutation-security';
 import {randomUUID} from 'node:crypto';
@@ -13,6 +14,8 @@ const sessions=new Map<string,Session>();
 const schema=z.object({carId:z.string().uuid(),session:z.string().uuid().optional(),action:z.enum(['vin','vehicle','group','root','part']),index:z.number().int().min(0).max(10000).optional()});
 const headers={'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'};
 export async function POST(request:Request){
+ return apiBoundary(async()=>{
+
  const reply=(data:unknown,status=200)=>Response.json(data,{status,headers});
  const denied=mutationGuard(request);if(denied)return denied;
  const user=await getChatGPTUser();if(!user)return reply({error:'Увійдіть у кабінет.'},401);
@@ -41,4 +44,6 @@ export async function POST(request:Request){
  s.groups=z.object({groups:z.array(groupSchema).default([])}).parse(data).groups;s.parts=catalogParts(data);
  return reply({session:id,title:s.vehicle.title||s.vehicle.modelName,groups:s.groups.map(g=>({name:g.name})),parts:s.parts,vehicles:[],notice:'Перевірте примітки, коди комплектації та варіанти виконання перед замовленням.'});
  }catch(e){const code=e instanceof Error?e.message:'';return reply({error:code==='CATALOG_ACCESS_DENIED'?'AutoDealer відхилив доступ. Перевірте токен і підписку.':'Каталог тимчасово недоступний. Повторіть спробу.'},502);}
+
+ },"/api/oem-catalog");
 }

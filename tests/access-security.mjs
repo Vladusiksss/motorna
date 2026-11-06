@@ -1,3 +1,4 @@
+import {apiBoundary} from '../app/api-response.ts';
 import {readJsonObject,jsonBodyFailure} from '../app/json-body.ts';
 import {mutationGuard,MOTORNA_ORIGIN} from '../app/mutation-security.ts';
 import assert from 'node:assert/strict';
@@ -20,8 +21,8 @@ const db={prepare(sql){let args=[];return {bind(...values){args=values;return th
 const objects=new Map();
 const bucket={async put(key,value){objects.set(key,new Uint8Array(value));},async get(key){const body=objects.get(key);return body?{body}:null;},async delete(key){objects.delete(key);}};
 let user={userId:'owner-a',displayName:'A',email:'a@example.test'};
-globalThis.securityTest={readJsonObject,jsonBodyFailure,mutationGuard,recordQuery,recordPage,RecordQueryError,purchaseRecordId,validPurchaseKey,samePurchaseInput,schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser:async()=>user,storage:async()=>({db,bucket}),catalogDb:async()=>({db,bucket}),shareHeaders:{'Cache-Control':'no-store'}};
-async function route(path){const source=readFileSync(path,'utf8').replace(/^import .*;\r?\n/gm,'');const setup='const {readJsonObject,jsonBodyFailure,mutationGuard,recordQuery,recordPage,RecordQueryError,purchaseRecordId,validPurchaseKey,samePurchaseInput,schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser,storage,catalogDb,shareHeaders}=globalThis.securityTest;\n';return import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(setup+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));}
+globalThis.securityTest={apiBoundary,readJsonObject,jsonBodyFailure,mutationGuard,recordQuery,recordPage,RecordQueryError,purchaseRecordId,validPurchaseKey,samePurchaseInput,schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser:async()=>user,storage:async()=>({db,bucket}),catalogDb:async()=>({db,bucket}),shareHeaders:{'Cache-Control':'no-store'}};
+async function route(path){const source=readFileSync(path,'utf8').replace(/^import .*;\r?\n/gm,'');const setup='const {apiBoundary,readJsonObject,jsonBodyFailure,mutationGuard,recordQuery,recordPage,RecordQueryError,purchaseRecordId,validPurchaseKey,samePurchaseInput,schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser,storage,catalogDb,shareHeaders}=globalThis.securityTest;\n';return import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(setup+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));}
 const records=await route('app/api/records/route.ts'),documents=await route('app/api/documents/route.ts'),document=await route('app/api/documents/[id]/route.ts'),requests=await route('app/api/purchase-request/[id]/route.ts'),shares=await route('app/api/car-catalog/route.ts'),publicShare=await route('app/api/shared-car/[token]/route.ts');
 const carA=crypto.randomUUID(),carB=crypto.randomUUID();
 const car={name:'TEST Honda',year:2003,engine:'3.0',vin:'1HGCM82633A004352',mileage:100,nextService:200};

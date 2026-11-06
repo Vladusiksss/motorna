@@ -8,6 +8,6 @@ let calls=0;
 const fetcher=async url=>{const u=new URL(url,'https://test');assert.equal(u.searchParams.get('kind'),'expense');assert.equal(u.searchParams.get('carId'),carId);assert.equal(u.searchParams.get('limit'),'100');calls++;assert.equal(u.searchParams.get('cursor'),calls===1?null:'next');return Response.json({user,records:[record(calls===1?id1:id2,3-calls)],page:{limit:100,total:2,hasMore:calls===1,nextCursor:calls===1?'next':null}});};
 assert.equal((await fetchAllRecords({kind:'expense',carId},fetcher)).length,2);assert.equal(calls,2);
 assert.equal(mergeRecords([record(id1,1)],[record(id1,2)]).length,1);
-await assert.rejects(()=>fetchAllRecords({kind:'expense'},async()=>new Response(null,{status:503})),/звіт/);
+await assert.rejects(()=>fetchAllRecords({kind:'expense'},async()=>new Response(null,{status:503})),error=>error.name==='ApiError'&&error.status===503&&error.code==='UNEXPECTED_RESPONSE');
 await assert.rejects(()=>fetchAllRecords({kind:'expense'},async()=>Response.json({user,records:[],page:{limit:100,total:2,hasMore:true,nextCursor:'repeated'}})),/сторінка/);
 console.log('PASS: complete explicit exports, retained filters, deduplication, failed pages and repeated cursors');

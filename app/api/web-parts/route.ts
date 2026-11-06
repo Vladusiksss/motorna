@@ -1,3 +1,4 @@
+import {apiBoundary} from '@/app/api-response';
 import {readJsonObject,jsonBodyFailure} from '@/app/json-body';
 import {mutationGuard} from '@/app/mutation-security';
 import {decodeVpic,VpicError} from '@/app/vpic';
@@ -9,6 +10,8 @@ const schema=z.object({carId:z.string().uuid(),part:z.string().trim().min(2).max
 const cache=new Map<string,{at:number;data:unknown}>();
 export const dynamic='force-dynamic';
 export async function POST(request:Request){
+ return apiBoundary(async()=>{
+
  const denied=mutationGuard(request);if(denied)return denied;
  const user=await getChatGPTUser();if(!user)return Response.json({error:'Увійдіть і підтвердьте автомобіль.'},{status:401});
  let data:z.infer<typeof schema>;try{const bodyJson=await readJsonObject(request,2000);data=schema.parse(bodyJson);}catch(error){const rejected=jsonBodyFailure(error);if(rejected)return rejected;return Response.json({error:'Оберіть автомобіль у гаражі та вкажіть деталь.'},{status:400});}
@@ -25,4 +28,6 @@ export async function POST(request:Request){
  const payload={...result,results:result.results.map(r=>({...r,dataMode:'live',numberMatch:!!data.oem&&matchesCatalogNumber(r,data.oem),fitment:{status:'unverified',reason:data.oem?'Каталожний номер збігається зі сторінкою товару. Його застосовність до VIN не підтверджена.':'Модель і назву деталі зіставлено. Відповідність комплектації за VIN не підтверджена.'}})),carId:data.carId,oem:data.oem,checkedAt:new Date().toISOString(),fitmentStatus:'unverified',notice:result.results.length?'Знайдені товари ще не підтверджені за комплектацією VIN.':'Не знайдено конкретних товарів із ціною. Уточніть назву деталі або артикул.'};
  if(cache.size>=50)cache.delete(cache.keys().next().value!);cache.set(key,{at:Date.now(),data:payload});return Response.json(payload);
  }catch(e){if(e instanceof VpicError)return Response.json({error:e.message,code:'VIN_NOT_VERIFIED'},{status:e.status});return Response.json({error:'Автоматичний пошук тимчасово недоступний. Повторіть спробу.',code:'SEARCH_UNAVAILABLE'},{status:503});}
+
+ },"/api/web-parts");
 }

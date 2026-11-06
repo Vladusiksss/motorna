@@ -1,3 +1,4 @@
+import {apiBoundary} from '@/app/api-response';
 import {readJsonObject,jsonBodyFailure} from '@/app/json-body';
 import {mutationGuard} from '@/app/mutation-security';
 import {randomUUID} from 'node:crypto';
@@ -9,6 +10,8 @@ export const dynamic='force-dynamic';
 const sessions=new Map<string,{owner:string;carId:string;expires:number;cars:Awaited<ReturnType<typeof partsIndexCars>>;selected?:number;parts:{number:string;name:string;description:string;notice:string}[]}>();
 const schema=z.object({carId:z.string().uuid(),session:z.string().uuid().optional(),action:z.enum(['vin','vehicle','root','part']),index:z.number().int().min(0).max(100000).optional()});
 export async function POST(request:Request){
+ return apiBoundary(async()=>{
+
  const reply=(d:unknown,status=200)=>Response.json(d,{status,headers:{'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'}});
  const denied=mutationGuard(request);if(denied)return denied;
  const user=await getChatGPTUser();if(!user)return reply({error:'Увійдіть у кабінет.'},401);
@@ -31,4 +34,6 @@ export async function POST(request:Request){
  s.parts=data.status==='success'?data.list.map(p=>({number:p.code,name:p.name.slice(0,140),description:p.groups.map(g=>g.name).filter(Boolean).join(' · '),notice:data.partsBrand?.name||''})):[];
  return reply({session:id,title:[vehicle.brand?.name,vehicle.model,vehicle.year].filter(Boolean).join(' '),vehicles:[],groups:[],parts:s.parts,pending:data.status!=='success',notice:data.status!=='success'?'Каталог готує перелік деталей. Оновіть результат.':'Артикули отримано від Parts Index для вибраного VIN. Звірте виробника й виконання товару.'});
  }catch(e){const c=e instanceof Error?e.message:'';return reply({error:c==='CATALOG_ACCESS_DENIED'?'Parts Index відхилив ключ або не надав доступ до Parts By VIN.':c==='CATALOG_RATE_LIMIT'?'Перевищено ліміт Parts Index. Спробуйте пізніше.':'Parts Index тимчасово недоступний або повернув неочікувані дані.'},502);}
+
+ },"/api/parts-index");
 }

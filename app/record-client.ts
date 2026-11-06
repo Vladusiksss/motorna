@@ -1,3 +1,4 @@
+import {readApi} from './api-contracts';
 import {z} from 'zod';
 import {parseRecord,type RecordItem,type RecordKind} from './record-types';
 export const pageSchema=z.object({limit:z.number().int().positive(),total:z.number().int().nonnegative(),hasMore:z.boolean(),nextCursor:z.string().nullable()});
@@ -9,5 +10,5 @@ export function mergeRecords(...groups:RecordItem[][]){return [...new Map(groups
 export async function fetchAllRecords(filter:{kind:RecordKind;carId?:string},fetcher:typeof fetch=fetch){
  const query=new URLSearchParams({kind:filter.kind,limit:'100'});if(filter.carId)query.set('carId',filter.carId);
  let result:RecordItem[]=[];const visited=new Set<string>();
- while(true){const response=await fetcher('/api/records?'+query);if(!response.ok)throw new Error('Не вдалося завантажити повний звіт. Спробуйте ще раз.');const data=parseRecordsPage(await response.json());result=mergeRecords(result,data.records);if(!data.page.hasMore)return result;if(!data.page.nextCursor||visited.has(data.page.nextCursor))throw new Error('Некоректна сторінка звіту.');visited.add(data.page.nextCursor);query.set('cursor',data.page.nextCursor);}
+ while(true){const response=await fetcher('/api/records?'+query);const data=parseRecordsPage(await readApi(response));result=mergeRecords(result,data.records);if(!data.page.hasMore)return result;if(!data.page.nextCursor||visited.has(data.page.nextCursor))throw new Error('Некоректна сторінка звіту.');visited.add(data.page.nextCursor);query.set('cursor',data.page.nextCursor);}
 }

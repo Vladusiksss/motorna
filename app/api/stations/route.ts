@@ -1,3 +1,4 @@
+import {apiBoundary} from '@/app/api-response';
 import {readJsonObject,jsonBodyFailure} from '@/app/json-body';
 import {mutationGuard} from '@/app/mutation-security';
 import {usableStation,uniqueStations} from '@/app/station-quality';
@@ -10,6 +11,8 @@ const cache=new Map<string,{at:number;value:unknown}>();const lastRequest=new Ma
 const input=z.union([z.object({address:z.string().trim().min(4).max(180)}),z.object({lat:z.number().min(44).max(52.5),lon:z.number().min(22).max(40.3),radius:z.union([z.literal(8),z.literal(15),z.literal(30)]).default(8)})]);
 
 export async function POST(request:Request){
+ return apiBoundary(async()=>{
+
  const denied=mutationGuard(request);if(denied)return denied;
  let data:z.infer<typeof input>;try{const bodyJson=await readJsonObject(request,1000);data=input.parse(bodyJson);}catch(error){const rejected=jsonBodyFailure(error);if(rejected)return rejected;return Response.json({error:'Укажіть адресу в Україні.'},{status:400});}
  const key=JSON.stringify(data),cached=cache.get(key);if(cached&&Date.now()-cached.at<3600000)return Response.json(cached.value);
@@ -28,4 +31,6 @@ export async function POST(request:Request){
  }
  if(cache.size>=100)cache.delete(cache.keys().next().value!);cache.set(key,{at:Date.now(),value});return Response.json(value);
  }catch{return Response.json({error:'address' in data?'Сервіс адрес тимчасово не відповідає. Повторіть пошук.':'Адресу визначено, але сервіс СТО тимчасово не відповідає. Повторіть пошук СТО або відкрийте Google Maps.'},{status:503});}
+
+ },"/api/stations");
 }

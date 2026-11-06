@@ -1,3 +1,4 @@
+import {apiBoundary} from '@/app/api-response';
 import {readJsonObject,jsonBodyFailure} from '@/app/json-body';
 import {mutationGuard} from '@/app/mutation-security';
 import {decodeVpic,VpicError} from '@/app/vpic';
@@ -6,6 +7,8 @@ import {getChatGPTUser} from '@/app/chatgpt-auth';
 import {storage} from '@/db/storage';
 export const dynamic='force-dynamic';
 export async function POST(request:Request){
+ return apiBoundary(async()=>{
+
  const denied=mutationGuard(request);if(denied)return denied;
  let identifier:string;try{const bodyJson=await readJsonObject(request,1000);const body=bodyJson;if(typeof body.identifier!=='string')throw new Error();identifier=body.identifier;}catch(error){const rejected=jsonBodyFailure(error);if(rejected)return rejected;return Response.json({error:'Введіть VIN автомобіля.'},{status:400});}
  try{
@@ -19,4 +22,6 @@ export async function POST(request:Request){
   }
   return Response.json({vehicle:await decodeVpic(vin)},{headers:{'Cache-Control':'private, no-store'}});
  }catch(e){return Response.json({error:e instanceof VpicError?e.message:'Пошук авто тимчасово недоступний.'},{status:e instanceof VpicError?e.status:503});}
+
+ },"/api/vehicle");
 }

@@ -13,7 +13,7 @@ const {z}=await import('zod');
 const sqlite=new DatabaseSync(':memory:');
 sqlite.exec(readFileSync('drizzle/0000_conscious_richard_fisk.sql','utf8'));
 sqlite.exec('CREATE TABLE car_documents(document_id TEXT PRIMARY KEY,car_id TEXT,owner TEXT);CREATE TABLE car_shares(token TEXT PRIMARY KEY,owner TEXT,car_id TEXT,payload TEXT,document_ids TEXT,created INTEGER)');
-const db={prepare(sql){let args=[];return {bind(...values){args=values;return this;},async first(){return sqlite.prepare(sql).get(...args)||null;},async all(){return {results:sqlite.prepare(sql).all(...args)};},async run(){return sqlite.prepare(sql).run(...args);}};}};
+const db={prepare(sql){let args=[];return {bind(...values){args=values;return this;},async first(){return sqlite.prepare(sql).get(...args)||null;},async all(){return {results:sqlite.prepare(sql).all(...args)};},async run(){const result=sqlite.prepare(sql).run(...args);return {success:true,meta:{changes:Number(result.changes)}};}};}};
 const objects=new Map();
 const bucket={async put(key,value){objects.set(key,new Uint8Array(value));},async get(key){const body=objects.get(key);return body?{body}:null;},async delete(key){objects.delete(key);}};
 let user={userId:'owner-a',displayName:'A',email:'a@example.test'};

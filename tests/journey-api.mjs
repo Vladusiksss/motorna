@@ -14,6 +14,7 @@ try{
  const analysis=await api('/api/analyze','POST',{vehicle:car.data.name,symptoms:'P0302',history:[]});assert.equal(analysis.status,200);assert.match((await analysis.json()).note,/P0302/);
  const line={title:'Test inquiry, no seller quote',part:'Термостат',oem:'TEST123',quantity:2,dataMode:'inquiry',fitment:'unverified'};
  const request=await create('purchaseRequest',{carId:car.id,lines:[line],note:'Local API integration test',status:'draft'});
+ assert.equal((await api('/api/records?id='+car.id,'DELETE')).status,409,'A car with a saved request must remain');
  assert.equal(request.data.vin,car.data.vin);assert.equal(request.data.status,'draft');
  const list=await api('/api/records');assert.ok((await list.json()).records.some(r=>r.id===request.id));
  const file=await api('/api/purchase-request/'+request.id);assert.equal(file.status,200);assert.match(file.headers.get('content-disposition'),/attachment/);assert.match(await file.text(),/1HGCM82633A004352/);

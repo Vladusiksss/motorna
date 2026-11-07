@@ -11,7 +11,7 @@ const objects=new Map();let failDelete=false,user={userId:'owner-a'};
 const bucket={async list({prefix,limit}){return {objects:[...objects.keys()].filter(k=>k.startsWith(prefix)).slice(0,limit).map(key=>({key}))};},async delete(key){if(failDelete)throw Error('temporary');objects.delete(key);}};
 globalThis.erasureFixture={storage:async()=>({db,bucket}),getChatGPTUser:async()=>user};
 const fixture='data:text/javascript,'+encodeURIComponent('export const {storage,getChatGPTUser}=globalThis.erasureFixture;');
-registerHooks({resolve(s,c,next){if(['@/db/storage','@/app/chatgpt-auth'].includes(s))return {url:fixture,shortCircuit:true};if(s.startsWith('@/'))s=pathToFileURL(process.cwd()+'/'+s.slice(2)+'.ts').href;return next(s,c);}});
+registerHooks({resolve(s,c,next){if(['@/db/storage','@/app/chatgpt-auth'].includes(s))return {url:fixture,shortCircuit:true};if(s.startsWith('@/'))s=pathToFileURL(process.cwd()+'/'+s.slice(2)+'.ts').href;try{return next(s,c);}catch(e){if(s.startsWith('.')&&!s.endsWith('.ts'))return next(s+'.ts',c);throw e;}}});
 const {eraseUserData,ERASURE_CONFIRMATION}=await import('../app/data-erasure.ts');
 const {dataConstraintFailure}=await import('../app/api-response.ts');
 const route=await import('../app/api/account-data/route.ts');
@@ -35,7 +35,8 @@ assert.equal((await route.DELETE(request({confirmation:ERASURE_CONFIRMATION},{Or
 assert.equal((await route.DELETE(request({confirmation:'no'}))).status,400);
 assert.equal((await route.DELETE(request({confirmation:'x'.repeat(600)}))).status,413);
 assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM records').get().n,2,'rejected requests have no side effect');
-failDelete=true;let result=await eraseUserData('owner-a');assert.equal(result.state,'pending');assert.equal(result.pendingFiles,33);
+const {rateSubject}=await import('../app/rate-limit.ts');const subject=await rateSubject('owner:owner-a');sqlite.prepare('INSERT INTO api_rate_limits VALUES(?,?,?,?,?)').run(subject,'reads',1,1,999999);
+failDelete=true;let result=await eraseUserData('owner-a');assert.equal(result.state,'pending');assert.equal(result.pendingFiles,33);assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM api_rate_limits WHERE subject=? AND scope='reads'").get(subject).n,0);
 assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM records WHERE owner='owner-a'").get().n,0);
 assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM station_reviews').get().n,0);
 assert.throws(()=>car('owner-a'),/MOTORNA_OWNER_ERASED/,'late write cannot recreate data');

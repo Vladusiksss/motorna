@@ -13,5 +13,5 @@ export async function POST(request:Request){
  try{const bodyJson=await readJsonObject(request,32000);const data=input.parse(bodyJson);return Response.json(analyzeConversation(data),{headers});}
  catch(error){const rejected=jsonBodyFailure(error);if(rejected)return rejected;return Response.json({error:'Опишіть, що змінилося в роботі авто.'},{status:400,headers});}
 
- },"/api/analyze");
+ },"/api/analyze",request);
 }

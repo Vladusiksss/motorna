@@ -32,5 +32,5 @@ export async function POST(request:Request){
  if(cache.size>=100)cache.delete(cache.keys().next().value!);cache.set(key,{at:Date.now(),value});return Response.json(value);
  }catch{return Response.json({error:'address' in data?'Сервіс адрес тимчасово не відповідає. Повторіть пошук.':'Адресу визначено, але сервіс СТО тимчасово не відповідає. Повторіть пошук СТО або відкрийте Google Maps.'},{status:503});}
 
- },"/api/stations");
+ },"/api/stations",request);
 }

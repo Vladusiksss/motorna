@@ -1,3 +1,4 @@
+import {rateSubject} from '@/app/rate-limit';
 import {storage} from '@/db/storage';
 export const ERASURE_CONFIRMATION='ВИДАЛИТИ МОЇ ДАНІ';
 export async function erasureStatus(owner:string){
@@ -6,12 +7,13 @@ export async function erasureStatus(owner:string){
  return {state:row?.state||'none',pendingFiles:queued?.n||0,updatedAt:row?.updated||0};
 }
 export async function eraseUserData(owner:string){
- const {db,bucket}=await storage();if(!bucket)throw new Error('File storage unavailable');const now=Date.now();
+ const {db,bucket}=await storage();if(!bucket)throw new Error('File storage unavailable');const now=Date.now(),subject=await rateSubject('owner:'+owner);
  // This tombstone is the write barrier. Triggers reject old in-flight writes,
  // including photo jobs. A minimal platform subject ID is retained for this
  // purpose; no profile, VIN, record payload or file content is retained here.
  await db.prepare("INSERT INTO user_data_erasure(owner,state,created,updated) VALUES(?,'pending',?,?) ON CONFLICT(owner) DO NOTHING").bind(owner,now,now).run();
  await db.batch([
+  db.prepare("DELETE FROM api_rate_limits WHERE subject=? AND scope<>'erasure'").bind(subject),
   db.prepare('INSERT OR IGNORE INTO user_data_erasure_blobs(owner,object_key) SELECT owner,owner || ? || id FROM documents WHERE owner=?').bind('/',owner),
   db.prepare('INSERT OR IGNORE INTO user_data_erasure_blobs(owner,object_key) SELECT owner,object_key FROM vehicle_photos WHERE owner=? AND object_key IS NOT NULL').bind(owner),
   ...['car_shares','car_documents','records','documents','vehicle_photos','vehicle_photo_search','station_reviews'].map(table=>db.prepare('DELETE FROM '+table+' WHERE owner=?').bind(owner)),
@@ -33,5 +35,5 @@ export async function eraseUserData(owner:string){
  const remaining=await bucket.list({prefix:owner+'/',limit:1});
  const done=!pending?.n&&!remaining.objects.length;
  await db.prepare('UPDATE user_data_erasure SET state=?,updated=? WHERE owner=?').bind(done?'complete':'pending',Date.now(),owner).run();
- return erasureStatus(owner);
+ return {...await erasureStatus(owner),deletedFiles:removed.length};
 }

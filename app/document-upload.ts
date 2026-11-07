@@ -1,12 +1,14 @@
+import {streamDeadline,BodyTimeoutError} from './body-timeout.mjs';
 export const MAX_DOCUMENT_BYTES=5*1024*1024;
 const MAX_FORM_BYTES=6*1024*1024;
 export class UploadError extends Error{status:number;constructor(message:string,status=400){super(message);this.status=status;}}
 // Bound the actual stream, not just the untrusted Content-Length header.
-export async function boundedUpload(request:Request):Promise<ArrayBuffer>{
+export async function boundedUpload(request:Request,timeoutMs=15000):Promise<ArrayBuffer>{
  if(Number(request.headers.get('content-length'))>MAX_FORM_BYTES)throw new UploadError('Максимальний розмір — 5 МБ',413);
  const reader=request.body?.getReader();if(!reader)throw new UploadError('Додайте документ.');
+ const deadline=streamDeadline(reader,timeoutMs);
  const chunks:Uint8Array[]=[];let size=0;
- try{while(true){const item=await reader.read();if(item.done)break;size+=item.value.byteLength;if(size>MAX_FORM_BYTES){await reader.cancel();throw new UploadError('Максимальний розмір — 5 МБ',413);}chunks.push(item.value);}}finally{reader.releaseLock();}
+ try{while(true){const item=await deadline.read();if(item.done)break;size+=item.value.byteLength;if(size>MAX_FORM_BYTES){void reader.cancel().catch(()=>{});throw new UploadError('Максимальний розмір — 5 МБ',413);}chunks.push(item.value);}}catch(error){if(error instanceof BodyTimeoutError)throw new UploadError('Час завантаження вичерпано.',408);throw error;}finally{deadline.dispose();reader.releaseLock();}
  const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}return bytes.buffer;
 }
 export function verifyDocument(bytes:ArrayBuffer,mime:string){

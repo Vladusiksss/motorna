@@ -15,7 +15,7 @@ for(let n=0;n<20;n++)insert(crypto.randomUUID(),'b','expense',1002,carA);
 const before=db.prepare('SELECT COUNT(*) AS n FROM records').get().n;
 db.exec(readFileSync('drizzle/0001_records_pagination_indexes.sql','utf8'));assert.equal(db.prepare('SELECT COUNT(*) AS n FROM records').get().n,before,'Index migration preserves rows');
 let owner='a';
-globalThis.paginationTest={apiBoundary,dataConstraintFailure,recordQuery,recordPage,RecordQueryError,getChatGPTUser:async()=>owner?{userId:owner,displayName:'Test',email:'test@example.test'}:null,storage:async()=>({db:{prepare(sql){let values=[];return {bind(...v){values=v;return this;},async all(){return {results:db.prepare(sql).all(...values)};},async first(){return db.prepare(sql).get(...values)||null;}};}}})};
+globalThis.paginationTest={apiBoundary:(task,route)=>apiBoundary(task,route),dataConstraintFailure,recordQuery,recordPage,RecordQueryError,getChatGPTUser:async()=>owner?{userId:owner,displayName:'Test',email:'test@example.test'}:null,storage:async()=>({db:{prepare(sql){let values=[];return {bind(...v){values=v;return this;},async all(){return {results:db.prepare(sql).all(...values)};},async first(){return db.prepare(sql).get(...values)||null;}};}}})};
 const source=readFileSync('app/api/records/route.ts','utf8').replace(/^import .*;\r?\n/gm,'');
 const setup='const {apiBoundary,dataConstraintFailure,recordQuery,recordPage,RecordQueryError,getChatGPTUser,storage}=globalThis.paginationTest;';
 const route=await import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule('const collectPhotoObjects=async()=>{};\n'+setup+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));

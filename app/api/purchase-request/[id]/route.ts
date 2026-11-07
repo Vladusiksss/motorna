@@ -17,5 +17,5 @@ export async function GET(_request:Request,{params}:{params:Promise<{id:string}>
   return new Response('\uFEFF'+text,{headers:{'Content-Type':'text/plain; charset=utf-8','Content-Disposition':`attachment; filename="motorna-request-${id}.txt"`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
  }catch{return new Response('Не вдалося сформувати файл.',{status:503});}
 
- },"/api/purchase-request/[id]");
+ },"/api/purchase-request/[id]",_request);
 }

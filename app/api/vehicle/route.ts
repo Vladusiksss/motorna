@@ -23,5 +23,5 @@ export async function POST(request:Request){
   return Response.json({vehicle:await decodeVpic(vin)},{headers:{'Cache-Control':'private, no-store'}});
  }catch(e){return Response.json({error:e instanceof VpicError?e.message:'Пошук авто тимчасово недоступний.'},{status:e instanceof VpicError?e.status:503});}
 
- },"/api/vehicle");
+ },"/api/vehicle",request);
 }

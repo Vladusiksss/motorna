@@ -13,5 +13,5 @@ export async function POST(request:Request){
  const result=await lookupPublicVin({vin,make:'',model:'',year:'',body:'',color:''});
  return Response.json({vin,photos:result.photos.map(p=>({...p,vin:p.sourceVin,host:p.provider})),status:result.state.status});
 
- },"/api/vin-photos");
+ },"/api/vin-photos",request);
 }

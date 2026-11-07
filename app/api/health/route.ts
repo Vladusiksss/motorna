@@ -3,7 +3,7 @@ import {storage} from '@/db/storage';
 export const dynamic='force-dynamic';
 let cached:{at:number;body:{status:string;checks:{database:string;files:string};checkedAt:string}}|undefined;
 async function bounded(check:()=>Promise<unknown>){let timer:ReturnType<typeof setTimeout>|undefined;try{await Promise.race([check(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('timeout')),3000);})]);return 'ok';}catch{return 'unavailable';}finally{if(timer)clearTimeout(timer);}}
-export async function GET(){
+export async function GET(request:Request){
  return apiBoundary(async()=>{
 
  if(!cached||Date.now()-cached.at>15000){
@@ -13,5 +13,5 @@ export async function GET(){
  }
  return Response.json(cached.body.status==='ok'?cached.body:{error:'Частина сервісів тимчасово недоступна.',code:'HEALTH_DEGRADED',details:cached.body},{status:cached.body.status==='ok'?200:503,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 
- },"/api/health");
+ },"/api/health",request);
 }

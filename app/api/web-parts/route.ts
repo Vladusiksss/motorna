@@ -29,5 +29,5 @@ export async function POST(request:Request){
  if(cache.size>=50)cache.delete(cache.keys().next().value!);cache.set(key,{at:Date.now(),data:payload});return Response.json(payload);
  }catch(e){if(e instanceof VpicError)return Response.json({error:e.message,code:'VIN_NOT_VERIFIED'},{status:e.status});return Response.json({error:'Автоматичний пошук тимчасово недоступний. Повторіть спробу.',code:'SEARCH_UNAVAILABLE'},{status:503});}
 
- },"/api/web-parts");
+ },"/api/web-parts",request);
 }

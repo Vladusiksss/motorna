@@ -1,3 +1,4 @@
+import {streamDeadline,BodyTimeoutError} from '@/app/body-timeout.mjs';
 import {apiBoundary} from '@/app/api-response';
 import {mutationGuard} from '@/app/mutation-security';
 import {runtimeConfig} from '@/app/runtime-config';
@@ -14,14 +15,16 @@ export async function PUT(request:Request){
  if(Number(request.headers.get('content-length'))>2*1024*1024)return new Response(null,{status:413});
  try{
   const reader=request.body?.getReader();if(!reader)return new Response(null,{status:400});
-  const chunks:Uint8Array[]=[];let length=0;
-  while(true){const {value,done}=await reader.read();if(done)break;length+=value.length;if(length>2*1024*1024){await reader.cancel();return new Response(null,{status:413});}chunks.push(value);}
+  const deadline=streamDeadline(reader);const chunks:Uint8Array[]=[];let length=0;
+  try{
+  while(true){const {value,done}=await deadline.read();if(done)break;length+=value.length;if(length>2*1024*1024){void reader.cancel().catch(()=>{});return new Response(null,{status:413});}chunks.push(value);}
   const data=new Uint8Array(length);let at=0;for(const chunk of chunks){data.set(chunk,at);at+=chunk.length;}
   if(data[0]!==31||data[1]!==139)return new Response(null,{status:400});
   const {bucket}=await storage();if(!bucket)throw Error('Storage unavailable');
   await bucket.put('vehicle-registry/mvs-v1/'+shard+'.gz',data,{httpMetadata:{contentType:'application/gzip'}});
   return Response.json({shard,bytes:length});
- }catch{return new Response(null,{status:503});}
+  }finally{deadline.dispose();reader.releaseLock();}
+ }catch(error){return new Response(null,{status:error instanceof BodyTimeoutError?408:503});}
 
- },"/api/registry-import");
+ },"/api/registry-import",request);
 }

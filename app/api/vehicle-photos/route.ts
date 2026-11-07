@@ -25,7 +25,7 @@ export async function GET(request:Request){
    }
    return Response.json(await gallery(user.userId,carId));
   }catch(e){const constraint=dataConstraintFailure(e);if(constraint)return constraint;return fail(e);}
- },'/api/vehicle-photos');
+ },'/api/vehicle-photos',request);
 }
 export async function POST(request:Request){
  return apiBoundary(async()=>{
@@ -53,7 +53,7 @@ export async function POST(request:Request){
    }
    return Response.json(await gallery(user.userId,carId),{status:201});
   }catch(e){const constraint=dataConstraintFailure(e);if(constraint)return constraint;return fail(e);}
- },'/api/vehicle-photos');
+ },'/api/vehicle-photos',request);
 }
 export async function PATCH(request:Request){
  return apiBoundary(async()=>{
@@ -65,7 +65,7 @@ export async function PATCH(request:Request){
    if(body.hideExternal!==undefined)await db.prepare('UPDATE vehicle_photo_search SET hide_external=? WHERE owner=? AND car_id=? AND vin=?').bind(Number(body.hideExternal),user.userId,body.carId,v.vin).run();
    return Response.json(await gallery(user.userId,body.carId));
   }catch(e){const constraint=dataConstraintFailure(e);if(constraint)return constraint;return fail(e);}
- },'/api/vehicle-photos');
+ },'/api/vehicle-photos',request);
 }
 export async function DELETE(request:Request){
  return apiBoundary(async()=>{
@@ -79,5 +79,5 @@ export async function DELETE(request:Request){
    }
    await collectPhotoObjects();return Response.json(await gallery(user.userId,carId));
   }catch(e){const constraint=dataConstraintFailure(e);if(constraint)return constraint;return fail(e);}
- },'/api/vehicle-photos');
+ },'/api/vehicle-photos',request);
 }

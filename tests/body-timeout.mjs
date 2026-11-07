@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {readJsonObject,jsonBodyFailure} from '../app/json-body.ts';
+import {boundedUpload} from '../app/document-upload.ts';
+const url='https://motorna-auto-space.bilogrivijvladislav.chatgpt.site/api/records';
+let cancelled=false;
+const stalled=new Request(url,{method:'POST',body:new ReadableStream({pull(){return new Promise(()=>{});},cancel(){cancelled=true;}}),duplex:'half'});
+await assert.rejects(()=>readJsonObject(stalled,100,20),e=>jsonBodyFailure(e)?.status===408);assert.equal(cancelled,true);
+let timer;const dripping=new Request(url,{method:'POST',body:new ReadableStream({start(c){timer=setInterval(()=>c.enqueue(new TextEncoder().encode(' ')),5);},cancel(){clearInterval(timer);}}),duplex:'half'});
+await assert.rejects(()=>readJsonObject(dripping,100,25),e=>e.status===408,'trickling bytes do not reset total deadline');
+const upload=new Request(url,{method:'POST',body:new ReadableStream({pull(){return new Promise(()=>{});}}),duplex:'half'});
+await assert.rejects(()=>boundedUpload(upload,20),e=>e.status===408);
+const huge=new Request(url,{method:'POST',body:new ReadableStream({start(c){c.enqueue(new Uint8Array(6*1024*1024+1));},cancel(){return new Promise(()=>{});}}),duplex:'half'});
+await assert.rejects(()=>boundedUpload(huge,100),e=>e.status===413,'oversize rejection never waits for hostile cancellation');
+console.log('Body deadlines: stalled/trickling JSON, stalled upload, safe cancellation and typed 408 responses passed');

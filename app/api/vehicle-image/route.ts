@@ -16,5 +16,5 @@ export async function GET(request:Request){
  if(cache.size>=100)cache.delete(cache.keys().next().value!);cache.set(key,{at:Date.now(),photos:result.photos});
  return Response.json({photos:result.photos});
 
- },"/api/vehicle-image");
+ },"/api/vehicle-image",request);
 }

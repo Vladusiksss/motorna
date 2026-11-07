@@ -13,7 +13,7 @@ export async function GET(request:Request){
  const rows=await db.prepare('SELECT author,rating,text,updated_at,owner FROM station_reviews WHERE station=? ORDER BY updated_at DESC').bind(id).all<{author:string;rating:number;text:string;updated_at:string;owner:string}>();
  return Response.json({reviews:rows.results.map(r=>({author:r.author,rating:r.rating,text:r.text,updatedAt:r.updated_at,mine:r.owner===user?.userId}))});
  }catch{return Response.json({error:'Не вдалося завантажити відгуки.'},{status:400});}
- },"/api/station-reviews");
+ },"/api/station-reviews",request);
 }
 export async function POST(request:Request){
  return apiBoundary(async()=>{
@@ -23,5 +23,5 @@ export async function POST(request:Request){
  try{const bodyJson=await readJsonObject(request,5000);const d=z.object({station,rating:z.number().int().min(1).max(5),text:z.string().trim().min(10).max(1500),author:z.string().trim().min(2).max(60)}).parse(bodyJson);
  const db=await database();await db.prepare('INSERT INTO station_reviews(station,owner,author,rating,text,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(station,owner) DO UPDATE SET author=excluded.author,rating=excluded.rating,text=excluded.text,updated_at=excluded.updated_at').bind(d.station,user.userId,d.author,d.rating,d.text,new Date().toISOString()).run();return Response.json({ok:true});
  }catch(error){const constraint=dataConstraintFailure(error);if(constraint)return constraint;const rejected=jsonBodyFailure(error);if(rejected)return rejected;return Response.json({error:'Вкажіть ім’я, оцінку 1–5 та відгук від 10 до 1500 символів.'},{status:400});}
- },"/api/station-reviews");
+ },"/api/station-reviews",request);
 }

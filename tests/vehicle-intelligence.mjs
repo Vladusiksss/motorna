@@ -4,7 +4,7 @@ import {pathToFileURL} from 'node:url';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 const sqlite=new DatabaseSync(':memory:');
-sqlite.exec(readFileSync('drizzle/0000_conscious_richard_fisk.sql','utf8'));
+sqlite.exec(readFileSync('drizzle/0000_conscious_richard_fisk.sql','utf8'));sqlite.exec(readFileSync('drizzle/0004_api_rate_limits.sql','utf8'));
 for(let i=0;i<2;i++)sqlite.exec(readFileSync('drizzle/0002_vehicle_photo_search.sql','utf8'));
 const db={prepare(sql){let args=[];return {bind(...v){args=v;return this;},async first(){return sqlite.prepare(sql).get(...args)||null;},async all(){return {results:sqlite.prepare(sql).all(...args)};},async run(){const r=sqlite.prepare(sql).run(...args);return {success:true,meta:{changes:Number(r.changes)}};}};}};
 const objects=new Map(),bucket={async put(k,b){objects.set(k,new Uint8Array(b));},async get(k){return objects.has(k)?{body:objects.get(k)}:null;},async delete(k){objects.delete(k);}};

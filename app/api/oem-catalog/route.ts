@@ -45,5 +45,5 @@ export async function POST(request:Request){
  return reply({session:id,title:s.vehicle.title||s.vehicle.modelName,groups:s.groups.map(g=>({name:g.name})),parts:s.parts,vehicles:[],notice:'Перевірте примітки, коди комплектації та варіанти виконання перед замовленням.'});
  }catch(e){const code=e instanceof Error?e.message:'';return reply({error:code==='CATALOG_ACCESS_DENIED'?'AutoDealer відхилив доступ. Перевірте токен і підписку.':'Каталог тимчасово недоступний. Повторіть спробу.'},502);}
 
- },"/api/oem-catalog");
+ },"/api/oem-catalog",request);
 }

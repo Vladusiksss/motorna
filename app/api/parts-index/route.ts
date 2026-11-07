@@ -35,5 +35,5 @@ export async function POST(request:Request){
  return reply({session:id,title:[vehicle.brand?.name,vehicle.model,vehicle.year].filter(Boolean).join(' '),vehicles:[],groups:[],parts:s.parts,pending:data.status!=='success',notice:data.status!=='success'?'Каталог готує перелік деталей. Оновіть результат.':'Артикули отримано від Parts Index для вибраного VIN. Звірте виробника й виконання товару.'});
  }catch(e){const c=e instanceof Error?e.message:'';return reply({error:c==='CATALOG_ACCESS_DENIED'?'Parts Index відхилив ключ або не надав доступ до Parts By VIN.':c==='CATALOG_RATE_LIMIT'?'Перевищено ліміт Parts Index. Спробуйте пізніше.':'Parts Index тимчасово недоступний або повернув неочікувані дані.'},502);}
 
- },"/api/parts-index");
+ },"/api/parts-index",request);
 }

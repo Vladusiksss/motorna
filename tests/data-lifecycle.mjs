@@ -6,7 +6,7 @@ import {pathToFileURL} from 'node:url';
 const sqlite=new DatabaseSync(':memory:');
 for(const name of readdirSync('drizzle').filter(n=>n.endsWith('.sql')).sort())sqlite.exec(readFileSync('drizzle/'+name,'utf8'));
 sqlite.exec(readFileSync('drizzle/0003_data_lifecycle.sql','utf8'));
-const db={prepare(sql){let args=[];return {bind(...v){args=v;return this;},execute(){const result=sqlite.prepare(sql).run(...args);return {success:true,meta:{changes:Number(result.changes)}};},async run(){return this.execute();},async first(){return sqlite.prepare(sql).get(...args)||null;},async all(){return {results:sqlite.prepare(sql).all(...args)};}};},async batch(statements){sqlite.exec('BEGIN');try{const r=statements.map(s=>s.execute());sqlite.exec('COMMIT');return r;}catch(e){sqlite.exec('ROLLBACK');throw e;}}};
+let calls=0;const db={prepare(sql){let args=[];return {bind(...v){args=v;return this;},execute(){const result=sqlite.prepare(sql).run(...args);return {success:true,meta:{changes:Number(result.changes)}};},async run(){calls++;return this.execute();},async first(){calls++;return sqlite.prepare(sql).get(...args)||null;},async all(){calls++;return {results:sqlite.prepare(sql).all(...args)};}};},async batch(statements){calls++;sqlite.exec('BEGIN');try{const r=statements.map(s=>s.execute());sqlite.exec('COMMIT');return r;}catch(e){sqlite.exec('ROLLBACK');throw e;}}};
 const objects=new Map();let failDelete=false,user={userId:'owner-a'};
 const bucket={async list({prefix,limit}){return {objects:[...objects.keys()].filter(k=>k.startsWith(prefix)).slice(0,limit).map(key=>({key}))};},async delete(key){if(failDelete)throw Error('temporary');objects.delete(key);}};
 globalThis.erasureFixture={storage:async()=>({db,bucket}),getChatGPTUser:async()=>user};
@@ -39,7 +39,7 @@ failDelete=true;let result=await eraseUserData('owner-a');assert.equal(result.st
 assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM records WHERE owner='owner-a'").get().n,0);
 assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM station_reviews').get().n,0);
 assert.throws(()=>car('owner-a'),/MOTORNA_OWNER_ERASED/,'late write cannot recreate data');
-failDelete=false;result=await eraseUserData('owner-a');assert.equal(result.state,'pending');assert.equal(result.pendingFiles,8);
+failDelete=false;calls=0;result=await eraseUserData('owner-a');assert.ok(calls<20,'bounded D1 calls, independent of the number of deleted files');assert.equal(result.state,'pending');assert.equal(result.pendingFiles,8);
 const response=await route.DELETE(request({confirmation:ERASURE_CONFIRMATION}));assert.equal(response.status,200);assert.equal((await response.json()).state,'complete');
 assert.equal((await eraseUserData('owner-a')).state,'complete','idempotent retry');
 assert.equal([...objects.keys()].filter(k=>k.startsWith('owner-a/')).length,0);
@@ -48,5 +48,6 @@ assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM records WHERE owner='owner-b
 assert.equal(dataConstraintFailure(new Error('D1: MOTORNA_OWNER_ERASED')).status,410);
 assert.equal(dataConstraintFailure(new Error('D1: MOTORNA_CAR_HAS_DOCUMENTS')).status,409);
 assert.equal(dataConstraintFailure(new Error('SQL secret')),null);
+for(let i=0;i<100;i++)objects.set('owner-c/'+crypto.randomUUID(),'interrupted');calls=0;const bulk=await eraseUserData('owner-c');assert.equal(bulk.pendingFiles,75);assert.ok(calls<20,'100 discovered objects use one bounded SQL insert, not 100 calls');
 user=null;assert.equal((await route.GET()).status,401);
 sqlite.close();console.log('Data lifecycle: migrations, links, QR revocation, bounded/CSRF requests, owner isolation, retries and write barrier passed');

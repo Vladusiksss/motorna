@@ -21,13 +21,14 @@ export async function eraseUserData(owner:string){
  // photo uploads share the owner's R2 prefix with documents. Legacy photo keys
  // were captured above before their rows were removed.
  const listed=await bucket.list({prefix:owner+'/',limit:100});
- for(const obj of listed.objects)await db.prepare('INSERT OR IGNORE INTO user_data_erasure_blobs(owner,object_key) VALUES(?,?)').bind(owner,obj.key).run();
+ if(listed.objects.length)await db.prepare('INSERT OR IGNORE INTO user_data_erasure_blobs(owner,object_key) SELECT ?,value FROM json_each(?)').bind(owner,JSON.stringify(listed.objects.map(obj=>obj.key))).run();
  const keys=await db.prepare('SELECT object_key FROM user_data_erasure_blobs WHERE owner=? LIMIT 25').bind(owner).all<{object_key:string}>();
- await Promise.allSettled(keys.results.map(async row=>{
-  await bucket.delete(row.object_key);
-  await db.prepare('DELETE FROM vehicle_photo_gc WHERE object_key=?').bind(row.object_key).run();
-  await db.prepare('DELETE FROM user_data_erasure_blobs WHERE owner=? AND object_key=?').bind(owner,row.object_key).run();
- }));
+ const deleted=await Promise.allSettled(keys.results.map(async row=>{await bucket.delete(row.object_key);return row.object_key;}));
+ const removed=deleted.flatMap(result=>result.status==='fulfilled'?[result.value]:[]);
+ if(removed.length){const encoded=JSON.stringify(removed);await db.batch([
+  db.prepare('DELETE FROM vehicle_photo_gc WHERE object_key IN (SELECT value FROM json_each(?))').bind(encoded),
+  db.prepare('DELETE FROM user_data_erasure_blobs WHERE owner=? AND object_key IN (SELECT value FROM json_each(?))').bind(owner,encoded),
+ ]);}
  const pending=await db.prepare('SELECT COUNT(*) AS n FROM user_data_erasure_blobs WHERE owner=?').bind(owner).first<{n:number}>();
  const remaining=await bucket.list({prefix:owner+'/',limit:1});
  const done=!pending?.n&&!remaining.objects.length;

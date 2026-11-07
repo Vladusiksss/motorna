@@ -1,5 +1,5 @@
 import {collectPhotoObjects} from '@/app/vehicle-intelligence/store';
-import {apiBoundary} from '@/app/api-response';
+import {apiBoundary,dataConstraintFailure} from '@/app/api-response';
 import {readJsonObject,jsonBodyFailure} from '@/app/json-body';
 import {mutationGuard} from '@/app/mutation-security';
 import {recordQuery,recordPage,RecordQueryError,type RecordRow} from '@/app/record-query';
@@ -16,7 +16,7 @@ export async function GET(request:Request=new Request('https://motorna.local/api
 
  const user=await getChatGPTUser();if(!user)return fail('Увійдіть, щоб відкрити свій гараж.',401);
  try{const query=await recordQuery(user.userId,new URL(request.url).searchParams);const {db}=await storage();const rows=await db.prepare(query.sql).bind(...query.values).all<RecordRow>();const count=await db.prepare(query.countSql).bind(...query.countValues).first<{total:number}>();return Response.json({user:{name:user.displayName,email:user.email},...recordPage(rows.results,query.limit,query.scope,count?.total||0)},{headers:privateHeaders});}
- catch(e){if(e instanceof RecordQueryError)return fail(e.message,400);console.error('records read',e);return fail('Не вдалося завантажити дані. Спробуйте ще раз.',503);}
+ catch(e){const constraint=dataConstraintFailure(e);if(constraint)return constraint;if(e instanceof RecordQueryError)return fail(e.message,400);console.error('records read',e);return fail('Не вдалося завантажити дані. Спробуйте ще раз.',503);}
 
  },"/api/records");
 }
@@ -51,7 +51,7 @@ if(requestKey){
  if(saved.kind!=='purchaseRequest'||!samePurchaseInput(data,parsed.data))return fail('Цей запит уже збережено з іншими деталями. Оновіть чернетку перед повторним збереженням.',409);
  return Response.json({record:{id:saved.id,kind:saved.kind,data,created:saved.created}},{status:201,headers:privateHeaders});
 }
-return Response.json({record:{id,kind:body.kind,data:parsed.data,created}},{status:201,headers:privateHeaders});}catch(e){const rejected=jsonBodyFailure(e);if(rejected)return rejected;console.error('records save',e);return fail('Не вдалося зберегти. Ваші поля залишилися заповненими.',503);}
+return Response.json({record:{id,kind:body.kind,data:parsed.data,created}},{status:201,headers:privateHeaders});}catch(e){const constraint=dataConstraintFailure(e);if(constraint)return constraint;const rejected=jsonBodyFailure(e);if(rejected)return rejected;console.error('records save',e);return fail('Не вдалося зберегти. Ваші поля залишилися заповненими.',503);}
  },"/api/records");
 }
 export async function DELETE(request:Request){
@@ -60,7 +60,7 @@ const user=await getChatGPTUser();if(!user)return fail('Потрібен вхі�
 const deleted=await db.prepare("DELETE FROM records WHERE id=? AND owner=? AND (kind<>'car' OR NOT EXISTS (SELECT 1 FROM records AS child WHERE child.owner=records.owner AND json_extract(child.payload,'$.carId')=records.id))").bind(id,user.userId).run();
 if(deleted.meta.changes===0){const exists=await db.prepare('SELECT id FROM records WHERE id=? AND owner=?').bind(id,user.userId).first();return exists?fail('Спершу видаліть пов’язані витрати, історію пошуку та запити цього автомобіля.',409):fail('Запис уже видалено.',404);}
 try{await collectPhotoObjects();}catch{console.warn('vehicle_photo_gc_deferred');}
-return Response.json({ok:true});}catch(e){console.error('records delete',e);return fail('Не вдалося видалити. Спробуйте ще раз.',503);}
+return Response.json({ok:true});}catch(e){const constraint=dataConstraintFailure(e);if(constraint)return constraint;console.error('records delete',e);return fail('Не вдалося видалити. Спробуйте ще раз.',503);}
  },"/api/records");
 }
 
@@ -71,7 +71,7 @@ export async function PATCH(request:Request){
  const user=await getChatGPTUser();if(!user)return fail('Потрібен вхід.',401);
  const denied=mutationGuard(request);if(denied)return denied;
  try{const bodyJson=await readJsonObject(request,60000);const body=bodyJson;if(typeof body.id!=='string')return fail('Невірний запис.');const {db}=await storage();const existing=await db.prepare('SELECT kind,created FROM records WHERE id = ? AND owner = ?').bind(body.id,user.userId).first();if(!existing)return fail('Запис не знайдено.',404);if(existing.kind!=='car')return fail('Редагування цього типу недоступне.');const parsed=schemas.car.safeParse(body.data);if(!parsed.success)return fail('Перевірте заповнення полів.');const updated=await db.prepare('UPDATE records SET payload = ? WHERE id = ? AND owner = ?').bind(JSON.stringify(parsed.data),body.id,user.userId).run();if(updated.meta.changes===0)return fail('Автомобіль уже видалено.',404);try{await collectPhotoObjects();}catch{console.warn('vehicle_photo_gc_deferred');}return Response.json({record:{id:body.id,kind:'car',data:parsed.data,created:existing.created}});
- }catch(e){const rejected=jsonBodyFailure(e);if(rejected)return rejected;console.error('records update',e);return fail('Не вдалося оновити автомобіль. Спробуйте ще раз.',503);}
+ }catch(e){const constraint=dataConstraintFailure(e);if(constraint)return constraint;const rejected=jsonBodyFailure(e);if(rejected)return rejected;console.error('records update',e);return fail('Не вдалося оновити автомобіль. Спробуйте ще раз.',503);}
 
  },"/api/records");
 }

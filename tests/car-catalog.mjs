@@ -1,4 +1,4 @@
-import {apiBoundary} from '../app/api-response.ts';
+import {apiBoundary,dataConstraintFailure} from '../app/api-response.ts';
 import {readJsonObject,jsonBodyFailure} from '../app/json-body.ts';
 import {mutationGuard,MOTORNA_ORIGIN} from '../app/mutation-security.ts';
 import assert from 'node:assert/strict';
@@ -8,8 +8,8 @@ import ts from 'typescript';
 const sqlite=new DatabaseSync(':memory:');
 sqlite.exec('CREATE TABLE records(id TEXT,owner TEXT,kind TEXT,payload TEXT);CREATE TABLE documents(id TEXT,owner TEXT,name TEXT,mime TEXT,size INTEGER);CREATE TABLE car_documents(document_id TEXT,car_id TEXT,owner TEXT);CREATE TABLE car_shares(token TEXT PRIMARY KEY,owner TEXT,car_id TEXT,payload TEXT,document_ids TEXT,created INTEGER)');
 let user={userId:'owner-a'};
-globalThis.catalogTest={apiBoundary,readJsonObject,jsonBodyFailure,mutationGuard,getChatGPTUser:async()=>user,catalogDb:async()=>({db:{prepare(sql){let args=[];return {bind(...v){args=v;return this},async first(){return sqlite.prepare(sql).get(...args)},async all(){return {results:sqlite.prepare(sql).all(...args)}},async run(){return sqlite.prepare(sql).run(...args)}}}},bucket:{get:async()=>({body:'receipt'})}}),shareHeaders:{'Cache-Control':'no-store'}};
-async function route(path){let source=readFileSync(path,'utf8').replace(/^import .*;\r?\n/gm,'');source="import {z} from 'zod';\n"+source;source=source.replace("import {z} from 'zod';",'const z=globalThis.catalogTest.z;const {apiBoundary,readJsonObject,jsonBodyFailure,mutationGuard,getChatGPTUser,catalogDb,shareHeaders}=globalThis.catalogTest;');globalThis.catalogTest.z=(await import('zod')).z;return import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));}
+globalThis.catalogTest={apiBoundary,dataConstraintFailure,readJsonObject,jsonBodyFailure,mutationGuard,getChatGPTUser:async()=>user,catalogDb:async()=>({db:{prepare(sql){let args=[];return {bind(...v){args=v;return this},async first(){return sqlite.prepare(sql).get(...args)},async all(){return {results:sqlite.prepare(sql).all(...args)}},async run(){return sqlite.prepare(sql).run(...args)}}}},bucket:{get:async()=>({body:'receipt'})}}),shareHeaders:{'Cache-Control':'no-store'}};
+async function route(path){let source=readFileSync(path,'utf8').replace(/^import .*;\r?\n/gm,'');source="import {z} from 'zod';\n"+source;source=source.replace("import {z} from 'zod';",'const z=globalThis.catalogTest.z;const {apiBoundary,dataConstraintFailure,readJsonObject,jsonBodyFailure,mutationGuard,getChatGPTUser,catalogDb,shareHeaders}=globalThis.catalogTest;');globalThis.catalogTest.z=(await import('zod')).z;return import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));}
 const owner=await route('app/api/car-catalog/route.ts'),publicApi=await route('app/api/shared-car/[token]/route.ts');
 const carId=crypto.randomUUID(),docId=crypto.randomUUID(),privateDoc=crypto.randomUUID();
 sqlite.prepare('INSERT INTO records VALUES (?,?,?,?)').run(carId,'owner-a','car',JSON.stringify({name:'Тестове авто',year:2021,vin:'TEST',mileage:100}));

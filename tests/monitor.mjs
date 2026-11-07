@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {probe,notify} from '../scripts/monitor-production.mjs';
+let calls=0;
+const healthy=await probe(async url=>{calls++;return Response.json(url.endsWith('/api/health')?{checks:{database:'ok',files:'ok'}}:{code:'AUTH_REQUIRED',requestId:'test'},{status:url.endsWith('/api/health')?200:401});});
+assert.equal(healthy.status,'healthy');assert.equal(calls,3);
+const failed=await probe(async()=>{throw Error('private secret');});assert.equal(failed.status,'failed');assert.equal(JSON.stringify(failed).includes('secret'),false);
+assert.equal(await notify(failed,undefined,{}),'not_configured');
+const config={token:'123:TEST_TOKEN',chatId:'12345'};
+assert.equal(await notify(healthy,'healthy',config,()=>assert.fail()),'unchanged');
+let text;assert.equal(await notify(failed,'healthy',config,async(url,options)=>{text=JSON.parse(options.body).text;return Response.json({ok:true});}),'sent');assert.match(text,/збій/);
+assert.equal(await notify(healthy,'failed',config,async()=>Response.json({ok:true})),'sent');
+assert.equal(await notify(failed,'healthy',config,async()=>{throw Error('token');}),'delivery_failed');
+assert.equal(await notify(failed,'healthy',{...config,chatId:'@blgrv_vlad'}),'invalid_configuration');
+console.log('Production monitor: probes, retries, incident/recovery alerts, dedupe and secret-safe failures passed');

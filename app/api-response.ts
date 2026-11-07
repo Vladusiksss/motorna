@@ -5,7 +5,7 @@ function object(value:unknown):Record<string,unknown>{return value&&typeof value
 // Every exported API handler runs inside this boundary. Never trust a caller-supplied request ID.
 export async function apiBoundary(task:()=>Promise<Response>,route:string):Promise<Response>{
  const requestId=crypto.randomUUID();let response:Response;
- try{response=await task();if(!(response instanceof Response)||response.status<200)throw new Error('Invalid API response');}catch{response=new Response(null,{status:500});}
+ try{response=await task();if(!(response instanceof Response)||response.status<200)throw new Error('Invalid API response');}catch(error){response=dataConstraintFailure(error)||new Response(null,{status:500});}
  const headers=new Headers(response.headers);headers.set('X-Request-Id',requestId);
  if(response.status<400)return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
  let source:Record<string,unknown>={};
@@ -22,4 +22,17 @@ export async function apiBoundary(task:()=>Promise<Response>,route:string):Promi
  headers.set('Cache-Control','private, no-store');headers.set('X-Content-Type-Options','nosniff');
  console.warn(JSON.stringify({event:'api_error',requestId,route,status:response.status,code}));
  return Response.json({code,message,requestId,...(details===undefined?{}:{details})},{status:response.status,headers});
+}
+
+// Match only our explicit constraint tokens, never expose a raw SQL error.
+export function dataConstraintFailure(error:unknown):Response|null{
+ let current=error;
+ for(let depth=0;depth<4&&current instanceof Error;depth++){
+  const message=current.message;
+  if(message.includes('MOTORNA_OWNER_ERASED'))return Response.json({code:'DATA_ERASED',message:'Дані цього профілю видалено. Нові записи заблоковано.'},{status:410});
+  if(message.includes('MOTORNA_CAR_HAS_DOCUMENTS'))return Response.json({code:'CAR_HAS_DOCUMENTS',message:'Спочатку видаліть чеки цього автомобіля.'},{status:409});
+  if(message.includes('MOTORNA_PARENT_MISSING'))return Response.json({code:'PARENT_NOT_FOUND',message:'Автомобіль або документ уже видалено.'},{status:409});
+  current=current.cause;
+ }
+ return null;
 }

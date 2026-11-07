@@ -1,4 +1,4 @@
-import {apiBoundary} from '@/app/api-response';
+import {apiBoundary,dataConstraintFailure} from '@/app/api-response';
 import {getChatGPTUser} from '@/app/chatgpt-auth';
 import {mutationGuard} from '@/app/mutation-security';
 import {readJsonObject,jsonBodyFailure} from '@/app/json-body';
@@ -24,7 +24,7 @@ export async function GET(request:Request){
     return new Response(object.body,{headers:{'Content-Type':p.mime!,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Cross-Origin-Resource-Policy':'same-origin','Content-Security-Policy':"default-src 'none'; sandbox"}});
    }
    return Response.json(await gallery(user.userId,carId));
-  }catch(e){return fail(e);}
+  }catch(e){const constraint=dataConstraintFailure(e);if(constraint)return constraint;return fail(e);}
  },'/api/vehicle-photos');
 }
 export async function POST(request:Request){
@@ -44,15 +44,15 @@ export async function POST(request:Request){
     const count=await db.prepare('SELECT COUNT(*) AS n FROM vehicle_photos WHERE owner=? AND car_id=? AND object_key IS NOT NULL').bind(user.userId,carId).first<{n:number}>();
     if((count?.n||0)>=20)throw new PhotoError('До 20 власних фото на автомобіль.',429,'PHOTO_LIMIT');
     if(!bucket)throw new PhotoError('Сховище тимчасово недоступне.',503,'STORAGE_UNAVAILABLE');
-    const id=crypto.randomUUID(),key='vehiclephotos/'+id;
+    const id=crypto.randomUUID(),key=user.userId+'/'+id;
     const p:VehiclePhoto={id,provider:'owner',url:'upload:'+digest,source:'',title:'Моє фото',match:'NO_MATCH',evidence:'owner_upload_not_vin_proof',license:'Приватне фото власника',checkedAt:Date.now(),expiresAt:8640000000000000,owned:true,mime:file.type as 'image/jpeg'|'image/png',objectKey:key};
     await db.prepare('INSERT OR IGNORE INTO vehicle_photo_gc(object_key,not_before) VALUES(?,?)').bind(key,Date.now()+60000).run();
     await bucket.put(key,image,{httpMetadata:{contentType:file.type}});
-    if(!await savePhoto(user.userId,carId,v.vin,p)){await bucket.delete(key);await ownedVehicle(user.userId,carId);return Response.json(await gallery(user.userId,carId),{status:201});}
+    try{if(!await savePhoto(user.userId,carId,v.vin,p)){await bucket.delete(key);await ownedVehicle(user.userId,carId);return Response.json(await gallery(user.userId,carId),{status:201});}}catch(e){await bucket.delete(key);throw e;}
     await db.prepare('DELETE FROM vehicle_photo_gc WHERE object_key=? AND EXISTS(SELECT 1 FROM vehicle_photos WHERE object_key=? AND owner=? AND car_id=?)').bind(key,key,user.userId,carId).run();
    }
    return Response.json(await gallery(user.userId,carId),{status:201});
-  }catch(e){return fail(e);}
+  }catch(e){const constraint=dataConstraintFailure(e);if(constraint)return constraint;return fail(e);}
  },'/api/vehicle-photos');
 }
 export async function PATCH(request:Request){
@@ -64,7 +64,7 @@ export async function PATCH(request:Request){
    if(body.primaryId!==undefined)await db.prepare('UPDATE vehicle_photo_search SET primary_id=? WHERE owner=? AND car_id=? AND vin=?').bind(body.primaryId,user.userId,body.carId,v.vin).run();
    if(body.hideExternal!==undefined)await db.prepare('UPDATE vehicle_photo_search SET hide_external=? WHERE owner=? AND car_id=? AND vin=?').bind(Number(body.hideExternal),user.userId,body.carId,v.vin).run();
    return Response.json(await gallery(user.userId,body.carId));
-  }catch(e){return fail(e);}
+  }catch(e){const constraint=dataConstraintFailure(e);if(constraint)return constraint;return fail(e);}
  },'/api/vehicle-photos');
 }
 export async function DELETE(request:Request){
@@ -78,6 +78,6 @@ export async function DELETE(request:Request){
     await db.prepare('DELETE FROM vehicle_photos WHERE owner=? AND car_id=? AND object_key IS NULL').bind(user.userId,carId).run();
    }
    await collectPhotoObjects();return Response.json(await gallery(user.userId,carId));
-  }catch(e){return fail(e);}
+  }catch(e){const constraint=dataConstraintFailure(e);if(constraint)return constraint;return fail(e);}
  },'/api/vehicle-photos');
 }

@@ -1,11 +1,11 @@
-import {apiBoundary} from '@/app/api-response';
+import {apiBoundary,dataConstraintFailure} from '@/app/api-response';
 import {readJsonObject,jsonBodyFailure} from '@/app/json-body';
 import {mutationGuard} from '@/app/mutation-security';
 import {storage} from '@/db/storage';
 import {getChatGPTUser} from '@/app/chatgpt-auth';
 import {z} from 'zod';
 const station=z.string().regex(/^(node|way|relation)\/\d{1,20}$/);
-async function database(){const {db}=await storage();await db.prepare("CREATE TABLE IF NOT EXISTS station_reviews (station TEXT NOT NULL, owner TEXT NOT NULL, author TEXT NOT NULL, rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5), text TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(station,owner))").run();return db;}
+async function database(){return (await storage()).db;}
 export async function GET(request:Request){
  return apiBoundary(async()=>{
 
@@ -22,6 +22,6 @@ export async function POST(request:Request){
  const user=await getChatGPTUser();if(!user)return Response.json({error:'Увійдіть, щоб залишити відгук.'},{status:401});
  try{const bodyJson=await readJsonObject(request,5000);const d=z.object({station,rating:z.number().int().min(1).max(5),text:z.string().trim().min(10).max(1500),author:z.string().trim().min(2).max(60)}).parse(bodyJson);
  const db=await database();await db.prepare('INSERT INTO station_reviews(station,owner,author,rating,text,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(station,owner) DO UPDATE SET author=excluded.author,rating=excluded.rating,text=excluded.text,updated_at=excluded.updated_at').bind(d.station,user.userId,d.author,d.rating,d.text,new Date().toISOString()).run();return Response.json({ok:true});
- }catch(error){const rejected=jsonBodyFailure(error);if(rejected)return rejected;return Response.json({error:'Вкажіть ім’я, оцінку 1–5 та відгук від 10 до 1500 символів.'},{status:400});}
+ }catch(error){const constraint=dataConstraintFailure(error);if(constraint)return constraint;const rejected=jsonBodyFailure(error);if(rejected)return rejected;return Response.json({error:'Вкажіть ім’я, оцінку 1–5 та відгук від 10 до 1500 символів.'},{status:400});}
  },"/api/station-reviews");
 }

@@ -64,3 +64,5 @@ __pycache__/
 
 # Private financial migration snapshots, reports and rollback payloads
 /.money-migration/
+
+.monitor-state/

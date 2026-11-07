@@ -1,0 +1,36 @@
+import {storage} from '@/db/storage';
+export const ERASURE_CONFIRMATION='ВИДАЛИТИ МОЇ ДАНІ';
+export async function erasureStatus(owner:string){
+ const {db}=await storage();const row=await db.prepare('SELECT state,created,updated FROM user_data_erasure WHERE owner=?').bind(owner).first<{state:string;created:number;updated:number}>();
+ const queued=await db.prepare('SELECT COUNT(*) AS n FROM user_data_erasure_blobs WHERE owner=?').bind(owner).first<{n:number}>();
+ return {state:row?.state||'none',pendingFiles:queued?.n||0,updatedAt:row?.updated||0};
+}
+export async function eraseUserData(owner:string){
+ const {db,bucket}=await storage();if(!bucket)throw new Error('File storage unavailable');const now=Date.now();
+ // This tombstone is the write barrier. Triggers reject old in-flight writes,
+ // including photo jobs. A minimal platform subject ID is retained for this
+ // purpose; no profile, VIN, record payload or file content is retained here.
+ await db.prepare("INSERT INTO user_data_erasure(owner,state,created,updated) VALUES(?,'pending',?,?) ON CONFLICT(owner) DO NOTHING").bind(owner,now,now).run();
+ await db.batch([
+  db.prepare('INSERT OR IGNORE INTO user_data_erasure_blobs(owner,object_key) SELECT owner,owner || ? || id FROM documents WHERE owner=?').bind('/',owner),
+  db.prepare('INSERT OR IGNORE INTO user_data_erasure_blobs(owner,object_key) SELECT owner,object_key FROM vehicle_photos WHERE owner=? AND object_key IS NOT NULL').bind(owner),
+  ...['car_shares','car_documents','records','documents','vehicle_photos','vehicle_photo_search','station_reviews'].map(table=>db.prepare('DELETE FROM '+table+' WHERE owner=?').bind(owner)),
+  db.prepare('DELETE FROM vehicle_photo_budget WHERE scope IN (?,?,?)').bind('search:'+owner,'paid:'+owner,'upload:'+owner),
+ ]);
+ // Also discover interrupted uploads which never gained a metadata row. New
+ // photo uploads share the owner's R2 prefix with documents. Legacy photo keys
+ // were captured above before their rows were removed.
+ const listed=await bucket.list({prefix:owner+'/',limit:100});
+ for(const obj of listed.objects)await db.prepare('INSERT OR IGNORE INTO user_data_erasure_blobs(owner,object_key) VALUES(?,?)').bind(owner,obj.key).run();
+ const keys=await db.prepare('SELECT object_key FROM user_data_erasure_blobs WHERE owner=? LIMIT 25').bind(owner).all<{object_key:string}>();
+ await Promise.allSettled(keys.results.map(async row=>{
+  await bucket.delete(row.object_key);
+  await db.prepare('DELETE FROM vehicle_photo_gc WHERE object_key=?').bind(row.object_key).run();
+  await db.prepare('DELETE FROM user_data_erasure_blobs WHERE owner=? AND object_key=?').bind(owner,row.object_key).run();
+ }));
+ const pending=await db.prepare('SELECT COUNT(*) AS n FROM user_data_erasure_blobs WHERE owner=?').bind(owner).first<{n:number}>();
+ const remaining=await bucket.list({prefix:owner+'/',limit:1});
+ const done=!pending?.n&&!remaining.objects.length;
+ await db.prepare('UPDATE user_data_erasure SET state=?,updated=? WHERE owner=?').bind(done?'complete':'pending',Date.now(),owner).run();
+ return erasureStatus(owner);
+}

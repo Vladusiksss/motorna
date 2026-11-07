@@ -5,13 +5,7 @@ import {lookupPaid,lookupCommons,paidProviders} from './providers';
 import {ownedVehicle,savePhoto,reserveBudget,finishJob,collectPhotoObjects,PhotoError} from './store';
 import type {ProviderStatus} from './contracts';
 
-const pending=new Set<Promise<void>>();
-async function background(task:Promise<void>){
- try{const {waitUntil}=await import('cloudflare:workers');waitUntil(task);}catch{
-  // Local Node development only. Production uses the Workers lifecycle.
-  pending.add(task);void task.finally(()=>pending.delete(task));
- }
-}
+import {background} from '@/app/modules/jobs/background';
 export async function startPhotos(owner:string,carId:string,force=false){
  const v=await ownedVehicle(owner,carId),{db}=await storage(),now=Date.now(),lease=crypto.randomUUID();
  await collectPhotoObjects();

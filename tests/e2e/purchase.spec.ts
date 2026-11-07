@@ -38,8 +38,10 @@ test('VIN → car → article → filters → private request → reload → TXT
  const vin='JHMCM56543C'+String(Date.now()).slice(-6);
  try{
   await addVehicle(page,vin);
+  let offerPolls=0;
   await page.route('**/api/web-parts',async route=>{
    expect(route.request().postDataJSON()).toMatchObject({part:'Гальмівні колодки',oem:'GDB3373'});
+   if(++offerPolls===1){await route.fulfill({status:202,headers:{'Retry-After':'2'},json:{pending:true,retryAfter:2,results:[]}});return;}
    await route.fulfill({json:{results:[
     {title:'E2E fixture TRW GDB3373',url:'https://prom.ua/ua/p999999001-e2e.html',host:'prom.ua',brand:'TRW',catalogNumbers:['GDB3373'],price:1000,currency:'UAH',availability:'Є в наявності',dataMode:'live',numberMatch:true,fitment:{status:'unverified',reason:'E2E fixture, no VIN fitment evidence'}},
     {title:'E2E fixture BOSCH',url:'https://prom.ua/ua/p999999002-e2e.html',host:'prom.ua',brand:'BOSCH',price:2000,currency:'UAH',dataMode:'live'},
@@ -48,6 +50,7 @@ test('VIN → car → article → filters → private request → reload → TXT
   });
   await page.getByRole('button',{name:'Знайти пропозиції для авто',exact:true}).click();
   await expect(page.locator('.refreshed-offer')).toHaveCount(3);
+  expect(offerPolls).toBe(2);
   await expect(page.locator('.refreshed-offer').filter({hasText:'E2E demonstration only'}).getByRole('button',{name:'До запиту',exact:true})).toBeDisabled();
   await page.locator('#finder-workspace').getByRole('button',{name:'Фільтри',exact:true}).click();
   await page.locator('#offer-filters').getByRole('combobox',{name:/Виробник/}).selectOption('TRW');

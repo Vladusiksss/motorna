@@ -1,10 +1,8 @@
 import {apiBoundary} from '@/app/api-response';
 import {readJsonObject,jsonBodyFailure} from '@/app/json-body';
 import {mutationGuard} from '@/app/mutation-security';
-import {z} from 'zod';
-import {analyzeConversation} from '@/app/diagnostic-conversation';
+import {analyzeConversation,diagnosticQuerySchema as input} from '@/app/modules/diagnostics/service';
 export const dynamic='force-dynamic';
-const input=z.object({vehicle:z.string().min(2).max(200),symptoms:z.string().trim().min(2).max(1000),history:z.array(z.object({role:z.enum(['user','assistant']),content:z.string().min(1).max(2000)})).max(20).default([]),questionId:z.string().max(40).optional()});
 export async function POST(request:Request){
  return apiBoundary(async()=>{
 

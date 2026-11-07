@@ -96,7 +96,16 @@ function PartsOverview({session,vin}:{session:SearchSession;vin:string}){
 }
 
 async function fetchSearch(wanted:string[],catalogNumber:string,carId:string,vehicle:VehicleInfo,label:string,problem:string,signal:AbortSignal){const links:LinkResult[]=[],failures:string[]=[];const controller={signal};
-for(const name of wanted){const r=await fetch('/api/web-parts',{signal:controller.signal,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({carId,part:name,oem:catalogNumber})});const value:unknown=await r.json();if(r.ok)links.push(...z.object({results:z.array(linkSchema)}).parse(value).results);else{failures.push(apiFailure(value,r.status,r.headers.get('X-Request-Id')).message);}}
+for(const name of wanted){
+ let completed=false;
+ for(let attempt=0;attempt<30;attempt++){
+  const r=await fetch('/api/web-parts',{signal:controller.signal,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({carId,part:name,oem:catalogNumber})});const value:unknown=await r.json();
+  if(r.status===202){await new Promise<void>((resolve,reject)=>{const cancel=()=>{clearTimeout(timer);reject(new DOMException('Aborted','AbortError'));};const timer=setTimeout(()=>{signal.removeEventListener('abort',cancel);resolve();},2000);signal.addEventListener('abort',cancel,{once:true});if(signal.aborted)cancel();});continue;}
+  if(r.ok)links.push(...z.object({results:z.array(linkSchema)}).parse(value).results);else failures.push(apiFailure(value,r.status,r.headers.get('X-Request-Id')).message);
+  completed=true;break;
+ }
+ if(!completed)failures.push('Пошук ще триває. Повторіть спробу трохи пізніше.');
+}
   const videos=wanted.flatMap(p=>{const q=repairQuery([vehicle?.make,vehicle?.model,vehicle?.year].filter(Boolean).join(' '),p);return [{title:`YouTube: ${q}`,url:'https://www.youtube.com/results?search_query='+encodeURIComponent(q)},{title:`Відео з інших джерел: ${p}`,url:'https://www.google.com/search?tbm=vid&q='+encodeURIComponent(q)}];}).slice(0,10);
   const value={oem:catalogNumber,vehicle:label.slice(0,200),carId,problem,parts:wanted,results:Array.from(new Map(links.map(r=>[r.url,r])).values()).slice(0,20),videos};return {value,failures:[...new Set(failures)]};
 }

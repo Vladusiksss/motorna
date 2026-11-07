@@ -1,83 +1,39 @@
-# Архітектура MOTORNA
+# Motorna domain architecture
 
-Актуально на 06.11.2026. Це опис реалізації, а не обіцянка майбутніх інтеграцій.
+## Boundaries
 
-## Розгортання та дані
-Один Vinext/React 19/TypeScript застосунок із серверними маршрутами Next.js розгортається як Cloudflare Worker через Sites. D1 зберігає персональні записи, кеш VIN і метадані. R2 зберігає документи, опубліковані каталоги й знімок реєстру МВС. Опублікована версія не залежить від увімкненого домашнього ПК. `backend/` — додатковий локальний Python/PostgreSQL імпортер; він не є production API сайту. Автоматичного перенесення локальних оновлень у хмарний знімок немає.
+- `app/modules/vin/service.ts`: VIN validation, registry/provider resolution, seven-day shared specification cache. `app/vpic.ts` is the backwards-compatible entry point. Provider enrichment never constitutes OEM fitment evidence.
+- `app/modules/catalog/service.ts`: owner/car/VIN scoped offer searches, leases, cache freshness and fitment labeling. HTTP concerns stay in `api/web-parts`.
+- `app/modules/garage/service.ts`: owned-car lookup and vehicle query composition. General record persistence/atomic parent constraints remain in `api/records` and SQL triggers; this is not a separate microservice.
+- `app/modules/diagnostics`: conversation rules and request contract. This is the existing deterministic symptom analyzer, not a newly connected LLM.
+- `app/modules/requests/contracts.ts`: purchase-line and draft validation; `validation.ts` preserves existing record API names. Draft composition remains the independently tested `purchase-model.ts`.
+- `app/modules/shared/contracts.ts`: inferred query DTOs, exact calendar dates, ISO timestamps, HTTPS URLs without embedded credentials, supported currencies and integer minor-unit money.
+- `app/modules/integrations/offer-adapter.ts`: injectable source interface and actual public-product-page adapter. Capability flags explicitly distinguish article matching from VIN fitment. Existing allowlists, timeouts and source extraction stay in `product-offers.ts`. Photo sources retain their specialized typed contracts and license/provenance policies under `vehicle-intelligence`.
 
-## Порядок визначення автомобіля
-1. `/api/vehicle`: збережений автомобіль поточного власника з тим самим VIN, якщо є марка, модель і рік.
-2. `app/vpic.ts`: точний збіг VIN у хмарному знімку МВС (`cloud-registry.ts`). Знімок містить реєстраційні характеристики, не власників та адреси.
-3. Необов’язковий локальний/тунельний MVS endpoint, лише якщо налаштований.
-4. D1-кеш декодування v4, TTL 7 діб.
-5. NHTSA vPIC. Неповний результат не перетворюється на вигадану комплектацію. Додаткове DB.VIN-збагачення перевіряє VIN і марку та потребує підтвердження користувачем.
+## Cache and jobs
 
-При повторному пошуку власник може бачити свої підтверджені дані першими. Жодне з цих джерел не підтверджує застосовність OEM для конкретної комплектації.
+VIN cache: seven days, expired entries removed on writes, registry results cached too. Migration 0006 adopts the pre-existing runtime-created VIN table without dropping rows. HTTP handlers no longer create this table.
 
-## Межі модулів
-| Модуль | Основні файли | Відповідальність |
-|---|---|---|
-| Vehicle & Garage | `vehicle-finder.tsx`, `vpic.ts`, `vehicle-resolution.ts`, `car-dossier.tsx`, `maintenance.ts` | VIN, підтвердження, пробіг, історія, документи, ТО |
-| Parts & Fitment | `product-offers.ts`, `catalog-number.ts`, `offer-filters.ts`, `offer-results.tsx` | Зовнішні пропозиції, збіг артикула, фільтрація; статус VIN unverified |
-| Offers & Requests | `purchase-model.ts`, `purchase-context.tsx`, `purchase-requests.tsx` | Кількість, окремі валюти, приватна чернетка, TXT |
-| Diagnostics | `diagnostic-conversation.ts`, `diagnostic-guide.ts`, `/api/analyze` | Симптоми, контекст діалогу, обмежений довідник OBD; не LLM |
-| Services | `repair-space.tsx`, `station-routing.ts`, `/api/stations`, `/api/station-reviews` | Адреса, відкриті точки, дорожня відстань, власні відгуки |
-| Users & Access | `chatgpt-auth.ts`, `/api/records`, `/api/documents` | Авторизація, прив’язка owner, валідація запитів |
+Offer cache: five minutes fresh, up to thirty minutes retained. Key includes owner, car ID, VIN, query and adapter ID; the key is SHA-256, the actual owner is stored for cleanup. Reusing stale data returns `cache.status=refreshing` and starts a background update; original `checkedAt` is preserved. First lookup returns HTTP 202/Retry-After 2; the client polls with cancellation and a finite timeout. Cached successful responses are HTTP 200/private/no-store.
 
-Це модульний моноліт. Файли не перенесені масово заради структури; таблиця задає поточні межі. Повноцінних seller/STO/admin ролей і кабінетів ще немає. Їх не слід імітувати клієнтськими перемикачами.
+D1 `catalog_search_jobs` gives a sixty-second atomic lease across Worker instances. Completion must still own the lease and the same parent VIN. Failed searches have a short cooldown and return the existing safe 503 envelope on the next poll. Jobs older than a day are collected after successful work. This is request-driven recovery, not an autonomous durable queue: Cloudflare waitUntil extends the Worker lifecycle; an interrupted job is retried by a later user request. Photo jobs use the same lifecycle helper and retain their existing durable search state/budgets.
 
-## Доступ та зовнішні джерела
-Персональні записи належать `owner` із перевіреної сервером ідентичності. Приватні API відхиляють анонімні запити; зміни перевіряють cross-site origin. Запит на купівлю сервер зв’язує з автомобілем власника. QR відкриває окремий відкличний публічний каталог; документи включаються лише за вибором власника.
+The heavy CSV import remains outside HTTP in `backend/import_mvs.py`. The protected registry upload endpoint only accepts a bounded already-prepared gzip shard and writes it to R2. Periodic imports, unconditional background price polling, Cloudflare Queues/cron consumers and unattended retries are **not configured**. They require a hosting-supported scheduler/queue binding; no such binding has been invented in the manifest.
 
-Публічні сторінки магазинів читаються сервером із тайм-аутами та перевіркою доменів. Закриті API, CAPTCHA та заборони доступу не обходяться. Ціни мають джерело й час перевірки; старі ціни історії позначені. Демотовари не можна додати в реальний запит. Заявка не є оплатою, резервуванням чи відправленим замовленням.
+## Integrity and migrations
 
-СТО: відкриті картографічні дані та маршрути. MOTORNA не гарантує повноту чи актуальність телефона/графіка. Партнерські календарі, зовнішні рейтинги та автоматичні записи не підключені.
+0005 adds offer-cache indexes for owner/car cleanup and expiry. 0006 adds job lease/owner indexes, adopts the VIN table, and installs SQL parent/erasure guards. Deleting or changing a car invalidates its cached offers and jobs. Account erasure removes both; late jobs cannot recreate them. Existing record pagination indexes and dependency restrictions remain unchanged.
 
-## Спільний інтерфейс
-`app/motorna-design.css` містить кольори, відступи, радіуси, стани фокусу й адаптивні елементи Motorna 2.0. Основна тема світла, primary #111827, фон #F8FAFC, accent #F97316, border #E2E8F0. Старі стилі збережені для сумісності й перекриті цим шаром. Темної теми поки немає. Головна показує історію/чернетки для вибраного авто.
+Schema changes go through `npm run db:generate`; review generated SQL and snapshots together. Handwritten triggers are intentionally part of the migration. Sites applies checked-in migrations before deploying the Worker. Never edit an already-deployed migration. `tests/architecture.mjs` rehearses both clean installation and adoption of an existing VIN cache using SQLite, tests lease deduplication, stale refresh, minor-unit normalization, and VIN/deletion/erasure races. It does not substitute for a D1/R2 backup/restore exercise (deferred by the owner).
 
-## Запуск та перевірки
-Залежності: Node.js і `npm ci`. Dev: `node scripts/run-framework.mjs dev --host 127.0.0.1` (адреса з виводу). Production build: `npm run build`. Перевірка типів: `node node_modules/typescript/bin/tsc --noEmit --incremental false`.
+## Data compatibility
 
-Регресії: `node tests/diagnostic-understanding.mjs`; `node --experimental-strip-types tests/maintenance.mjs`; `node --experimental-strip-types tests/purchase-journey.mjs`; `node --experimental-strip-types tests/offer-fitment.mjs`; `node --experimental-strip-types tests/offer-filters.mjs`. Повний набір живих тестів потребує запущеного локального сервера та доступності зовнішніх джерел. Результат локального тесту не гарантує uptime стороннього API.
+New adapter output adds `money: {amountMinor,currency}` when the source price has an exact supported two-decimal representation; otherwise money is null. Existing `price`/`currency` wire fields remain for the deployed UI and stored drafts. Historical financial backfill is still the separately prepared migration and has not been activated. No implicit currency conversion or rounding is introduced.
 
-## Що залишилось для масштабування
-Єдині DTO для всіх API, відокремлені адаптери кожного продавця, стійкі черги оновлення цін, централізовані метрики/моніторинг, розподілений rate-limit, історія зміни статусів заявок та серверні B2B-ролі — наступні роботи, не наявні можливості. Не переносити D1 на PostgreSQL і не вводити мікросервіси без виміряного обмеження.
+## Checks
 
-CI: `.github/workflows/ci.yml`; 23 регресійні набори `npm test`, локальний API-сценарій `npm run test:api`. lint:strict виконує eslint . без baseline: 0 помилок, 64 попередження; warnings не блокують перевірку. Див. README. Браузерний Playwright E2E запускає 11 сценаріїв у desktop/mobile (22 тести); подробиці та межі фікстур у TESTING.md.
+`npm run lint:strict`, `npm run typecheck`, `npm test`, `npm run build`, `npm run test:e2e`. Merchant/VIN upstream fixtures in browser tests are explicitly mocked; real public sources are not guaranteed available by passing CI.
 
-Release checks: `/api/health` читає D1 і фіксований відсутній ключ R2, кеш probe 15 секунд; без персональних даних і повідомлень помилок сховища. Multipart upload обмежений фактичним потоком 6 МБ, сам файл — 5 МБ; сигнатури PDF/JPEG/PNG перевіряються до запису. Антивірусне сканування не підключено. RELEASE.md описує перевірене та невиконані критерії.
+## Related operational contracts
 
-Цілісність записів авто: POST витрат, історії та запитів виконує INSERT SELECT лише за наявності авто того самого власника. DELETE авто виконується лише за відсутності записів цього власника з відповідним payload.carId. Обидві перевірки є частиною одного SQL-запису, тому окремі попередні SELECT не є гарантією цілісності. Видалення обмежене (409), а не каскадне; після очищення дочірніх записів авто можна видалити. Зв’язки документів та QR з інших таблиць цим правилом records не охоплюються.
-
-GET /api/records тепер завжди сторінковий: limit=50 за замовчуванням, 1–100. Доступні kind (тип зі schemas), carId (пов’язані записи), id, from/to (включні created у мілісекундах Unix UTC). Сортування created DESC, id DESC; курсор nextCursor прив’язаний до власника та фільтрів. Відповідь зберігає user/records і додає page:{limit,total,hasMore,nextCursor}; total — кількість за фільтром, не лише залишок після курсора. Курсор не є авторизацією; owner береться тільки із сесії. Некоректні, повторені й невідомі параметри дають 400. Для наступної сторінки слід повторити ті самі фільтри й передати cursor. Паралельні зміни можуть змінити total; це не snapshot-транзакція.
-
-Міграція 0001 додає owner/created/id, owner/kind/created/id та два індекси з json_extract(payload,'$.carId') — із kind і без. При рівності префіксів SQLite читає індекс у зворотному напрямку. Вона не змінює записи. Початкове завантаження UI обмежене: перша загальна сторінка та перші 100 авто, вибране старіше авто — окремим id-фільтром. Старіші записи завантажуються кнопкою; частковість статистики явно позначена. Повне завантаження сторінок використовується лише для явного експорту CSV/PDF/Excel.
-
-
-## Origin / CSRF
-
-Усі 17 обробників POST/PUT/PATCH/DELETE використовують `app/mutation-security.ts` до читання тіла та зміни даних. Браузерні запити вимагають точний Origin опублікованого MOTORNA; localhost:5173 і 127.0.0.1:5173 дозволені лише поза production. Host/Forwarded не формують список довірених джерел. Відсутній/null Origin, чужий Referer, same-site/cross-site Fetch Metadata, навігаційний mode/dest відхиляються. Відсутність Fetch Metadata допускається лише за правильного Origin. JSON API приймають application/json, документи — multipart/form-data з boundary; DELETE без тіла дозволений. Відмови мають 403/415 та private, no-store. Це захист на основі Origin/Fetch Metadata, не окремий сесійний CSRF-токен.
-
-Виняток: PUT registry-import спочатку перевіряє окремий REGISTRY_IMPORT_TOKEN, потім дозволяє машинний application/gzip без браузерних заголовків; це не обхід для API із сесіями. Службові клієнти інших API повинні явно надсилати правильний Origin. Авторизація власника й перевірки даних залишаються окремими обов’язковими перевірками.
-
-
-## Обмежене читання JSON
-
-`app/json-body.ts` читає тіло через ReadableStream і рахує фактичні UTF-8 байти до декодування кожного чанка. На перевищенні читання скасовується; наступні чанки не накопичуються. Content-Length дозволяє ранню відмову, але не замінює підрахунок потоку. Ліміти: records POST/PATCH — 60 000 байтів; analyze — 32 000; station-routes — 40 000; car-catalog — 10 000; station-reviews — 5 000; oem-catalog/parts-index/web-parts — 2 000; vehicle/stations — 1 000; vin-photos — 200. Це ліміти байтів, а не символів.
-
-Завелике тіло повертає 413, пошкоджений JSON/UTF-8, не-об’єкт або обірваний потік — 400; стиснене тіло — 415. Помилки не містять внутрішніх деталей і мають private, no-store. Origin і авторизація перевіряються перед читанням. Multipart-документи та gzip-імпорт зберігають власні потокові обмеження. JSON повністю парситься лише після обмеженого читання; це не інкрементальний JSON-парсер і не обмеження часу виконання.
-
-
-## Контракт помилок API
-
-Усі 26 реалізованих обробників проходять через `apiBoundary` у `app/api-response.ts`. HTTP-помилки повертають JSON `{code, message, requestId}` зі збереженням HTTP-статусу. Коди стабільні та не залежать від локалізованого тексту: AUTH_REQUIRED, FORBIDDEN, NOT_FOUND, CONFLICT, SERVICE_UNAVAILABLE тощо; спеціальні CSRF_REJECTED, INVALID_JSON_BODY, JSON_BODY_TOO_LARGE та коди провайдерів зберігаються. Health може додати публічне поле details зі станом перевірок. Текстові й порожні помилки отримують безпечне повідомлення за статусом. Необроблений виняток стає INTERNAL_ERROR / 500 без тексту винятку.
-
-requestId — новий серверний UUID на кожен запит; вхідний X-Request-Id не використовується. Ідентифікатор збігається у JSON, X-Request-Id та структурованому записі api_error зі статичним маршрутом, статусом і кодом. Журнал кореляції не містить URL-параметрів, VIN, документів або токенів QR. Помилки мають private, no-store та nosniff. Успішні JSON і завантаження файлів зберігають тіло й додають X-Request-Id.
-
-Клієнтський readApi створює ApiError з message, code, requestId і status. Старий error читається лише для сумісності зі старою кешованою версією/зовнішніми відповідями; серверний контракт уже повертає message. Відповіді платформи до входу в обробник (наприклад, відхилення на рівні хостингу) не формуються цим кодом.
-
-
-## Підготовка money-v2
-
-app/money.ts і scripts/prepare-money-migration.mjs готують minor units + currency для фінансових records і QR-історії. Вони не включені в активний запис/читання API й не запускаються автоматичними міграціями Sites. Формат, dry-run, пакети SQLite/D1, відкат, кроки активації та межі перевірок: [MONEY_MIGRATION.md](MONEY_MIGRATION.md).
+Authorization, Origin/CSRF, streaming body limits, request IDs and rate limiting: [API_SECURITY.md](API_SECURITY.md). Record pagination/export: `app/record-query.ts` and `tests/records-pagination.mjs`. Personal-data deletion and retained technical tombstone: [DATA_LIFECYCLE.md](DATA_LIFECYCLE.md). Financial migration/rollback: [MONEY_MIGRATION.md](MONEY_MIGRATION.md). Release evidence and remaining external dependencies: [RELEASE.md](RELEASE.md).

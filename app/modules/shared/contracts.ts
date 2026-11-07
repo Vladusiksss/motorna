@@ -1,0 +1,10 @@
+import {z} from 'zod';
+export const currencySchema=z.enum(['UAH','EUR','USD','GBP']);
+export const moneySchema=z.object({amountMinor:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),currency:currencySchema});
+export const isoDateTimeSchema=z.string().datetime({offset:true});
+export const calendarDateSchema=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value=>{const date=new Date(value+'T00:00:00Z');return Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===value;});
+export const httpsUrlSchema=z.string().url().refine(value=>{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password;});
+export const catalogQuerySchema=z.object({carId:z.string().uuid(),part:z.string().trim().min(2).max(140),oem:z.string().trim().max(40).regex(/^[A-Za-z0-9 .-]*$/).default('')});
+export const diagnosticQuerySchema=z.object({vehicle:z.string().min(2).max(200),symptoms:z.string().trim().min(2).max(1000),history:z.array(z.object({role:z.enum(['user','assistant']),content:z.string().min(1).max(2000)})).max(20).default([]),questionId:z.string().max(40).optional()});
+export type CatalogQuery=z.infer<typeof catalogQuerySchema>;
+export type MoneyDTO=z.infer<typeof moneySchema>;

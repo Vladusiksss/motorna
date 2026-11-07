@@ -1,6 +1,8 @@
+import {registerHooks} from 'node:module';
+registerHooks({resolve(s,c,next){try{return next(s,c);}catch(e){if(s.startsWith('.')&&!s.endsWith('.ts'))return next(s+'.ts',c);throw e;}}});
 import assert from 'node:assert/strict';
 import {filterOffers,emptyOfferFilters} from '../app/offer-filters.ts';
-import {schemas} from '../app/validation.ts';
+const {schemas}=await import('../app/validation.ts');
 const offers=[{title:'Колодки',host:'shop-a',price:1000,currency:'UAH'},{title:'Колодки',host:'shop-b',price:20,currency:'EUR'},{title:'Диск',host:'shop-a',price:500,currency:'UAH'},{title:'Диск без ціни',host:'shop-a',currency:'UAH'}];
 assert.deepEqual(filterOffers(offers,{...emptyOfferFilters,sort:'ascending'}),offers,'Do not sort unlike currencies together');
 assert.deepEqual(filterOffers(offers,{...emptyOfferFilters,currency:'UAH',min:'600'}),[offers[0]],'Range excludes missing prices and other currencies');

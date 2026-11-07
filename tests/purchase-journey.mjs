@@ -1,6 +1,8 @@
+import {registerHooks} from 'node:module';
+registerHooks({resolve(s,c,next){try{return next(s,c);}catch(e){if(s.startsWith('.')&&!s.endsWith('.ts'))return next(s+'.ts',c);throw e;}}});
 import assert from 'node:assert/strict';
 import {addPurchaseLine,purchaseText,purchaseTotals} from '../app/purchase-model.ts';
-import {schemas} from '../app/validation.ts';
+const {schemas}=await import('../app/validation.ts');
 import {filterOffers,emptyOfferFilters} from '../app/offer-filters.ts';
 const vehicle={carId:'11111111-1111-4111-8111-111111111111',vehicle:'AUDI A6 2014',vin:'WAUZZZ4G5EN130128'};
 const line={title:'Тестова пропозиція · термостат',part:'Термостат',oem:'TEST123',url:'https://renix.ua/part/test/test123/',host:'renix.ua',price:1000.25,currency:'UAH',quantity:1,dataMode:'live',fitment:'unverified'};

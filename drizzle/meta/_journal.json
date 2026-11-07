@@ -36,6 +36,20 @@
       "when": 1794090000000,
       "tag": "0004_api_rate_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794090000001,
+      "tag": "0005_catalog_offer_cache",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794090000002,
+      "tag": "0006_domain_cache_jobs",
+      "breakpoints": true
     }
   ]
 }

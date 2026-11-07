@@ -4,7 +4,7 @@ import ts from 'typescript';
 const transpile=source=>ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
 const url=source=>'data:text/javascript;base64,'+Buffer.from(transpile(source)).toString('base64');
 const guideUrl=url(readFileSync('app/diagnostic-guide.ts','utf8'));
-const {analyzeConversation:analyze}=await import(url(readFileSync('app/diagnostic-conversation.ts','utf8').replace("'./diagnostic-guide'",JSON.stringify(guideUrl))));
+const {analyzeConversation:analyze}=await import(url(readFileSync('app/modules/diagnostics/conversation.ts','utf8').replace("'../../diagnostic-guide'",JSON.stringify(guideUrl))));
 const car='Audi A6 2014 3.0 TDI дизель';
 function run(symptoms,history=[],questionId){return analyze({vehicle:car,symptoms,history,questionId});}
 const cases=[['стукае двигн','engine_knock'],['стучит мотор','engine_knock'],['стук спереди на ямах','bumps'],['не заводитса','starting_unknown'],['не тянет машина','power'],['туго набирає оберти','power'],['скрипить під час гальмування','brakes'],['гуде колесо на швидкості','bearing'],['кондиціонер не холодить','aircon'],['двигун довго прогрівається','cold_engine'],['чорний дим','black_smoke'],['горить лампа акумулятора','charging'],['чек горить','check_engine']];

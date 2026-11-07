@@ -1,9 +1,11 @@
+import {registerHooks} from 'node:module';
+registerHooks({resolve(s,c,next){try{return next(s,c);}catch(e){if(s.startsWith('.')&&!s.endsWith('.ts'))return next(s+'.ts',c);throw e;}}});
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {z} from 'zod';
 import {routedSearchIntent} from '../app/search-intent.ts';
-import {schemas} from '../app/validation.ts';
+const {schemas}=await import('../app/validation.ts');
 globalThis.recordTypeTest={z,schemas};
 const source=readFileSync('app/record-types.ts','utf8').replace(/^import .*;\r?\n/gm,'');
 const code=ts.transpileModule('const {z,schemas}=globalThis.recordTypeTest;'+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;

@@ -17,3 +17,8 @@ export const userDataErasure=sqliteTable('user_data_erasure',{owner:text('owner'
 export const userDataErasureBlobs=sqliteTable('user_data_erasure_blobs',{owner:text('owner').notNull(),objectKey:text('object_key').notNull()},t=>[primaryKey({columns:[t.owner,t.objectKey]})]);
 
 export const apiRateLimits=sqliteTable('api_rate_limits',{subject:text('subject').notNull(),scope:text('scope').notNull(),window:integer('window').notNull(),calls:integer('calls').notNull(),expires:integer('expires').notNull()},t=>[primaryKey({columns:[t.subject,t.scope]}),index('idx_api_rate_limits_expires').on(t.expires)]);
+
+export const catalogOfferCache=sqliteTable('catalog_offer_cache',{cacheKey:text('cache_key').primaryKey(),owner:text('owner').notNull(),carId:text('car_id').notNull(),vin:text('vin').notNull(),payload:text('payload').notNull(),freshUntil:integer('fresh_until').notNull(),expires:integer('expires').notNull()},t=>[index('idx_catalog_cache_owner_car').on(t.owner,t.carId),index('idx_catalog_cache_expires').on(t.expires)]);
+
+export const catalogSearchJobs=sqliteTable('catalog_search_jobs',{cacheKey:text('cache_key').primaryKey(),owner:text('owner').notNull(),carId:text('car_id').notNull(),vin:text('vin').notNull(),lease:text('lease').notNull(),leaseUntil:integer('lease_until').notNull()},t=>[index('idx_catalog_jobs_owner_car').on(t.owner,t.carId),index('idx_catalog_jobs_lease').on(t.leaseUntil)]);
+export const vinDecodeCache=sqliteTable('vin_decode_cache_world_v4',{vin:text('vin').primaryKey(),payload:text('payload').notNull(),expiresAt:integer('expires_at').notNull()},t=>[index('idx_vin_cache_expires').on(t.expiresAt)]);

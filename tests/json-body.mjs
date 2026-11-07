@@ -25,6 +25,6 @@ const broken=new Request(url,{method:'POST',body:new ReadableStream({start(c){c.
 // Cancellation may itself reject or never resolve: neither must replace/delay 413.
 for(const cancel of [()=>Promise.reject(Error('cancel failed')),()=>new Promise(()=>{})]){const req=new Request(url,{method:'POST',body:new ReadableStream({start(c){c.enqueue(encode('123'));},cancel}),duplex:'half'});await rejected(req,2,413);}
 assert.equal(jsonBodyFailure(Error('private')),null);await assert.rejects(()=>readJsonObject(new Request(url),0),RangeError);
-let count=0;function walk(path){for(const item of readdirSync(path,{withFileTypes:true})){const file=path+'/'+item.name;if(item.isDirectory())walk(file);else if(item.name==='route.ts'){const source=readFileSync(file,'utf8');assert.doesNotMatch(source,/(?:request|req)\.(?:text|json|arrayBuffer)\(/,file);count+=(source.match(/await readJsonObject\(/g)||[]).length;}}}walk('app/api');assert.equal(count,12);
-console.log('PASS: 12 route readers; exact UTF-8 byte bounds, chunk cancellation, missing/false Content-Length, malformed JSON/UTF-8, aborts, broken streams and nonblocking cancellation');
+let count=0;function walk(path){for(const item of readdirSync(path,{withFileTypes:true})){const file=path+'/'+item.name;if(item.isDirectory())walk(file);else if(item.name==='route.ts'){const source=readFileSync(file,'utf8');assert.doesNotMatch(source,/(?:request|req)\.(?:text|json|arrayBuffer)\(/,file);count+=(source.match(/await readJsonObject\(/g)||[]).length;}}}walk('app/api');assert.equal(count,14);
+console.log('PASS: 14 route readers; exact UTF-8 byte bounds, chunk cancellation, missing/false Content-Length, malformed JSON/UTF-8, aborts, broken streams and nonblocking cancellation');
 

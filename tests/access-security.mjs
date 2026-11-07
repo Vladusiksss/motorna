@@ -22,7 +22,7 @@ const objects=new Map();
 const bucket={async put(key,value){objects.set(key,new Uint8Array(value));},async get(key){const body=objects.get(key);return body?{body}:null;},async delete(key){objects.delete(key);}};
 let user={userId:'owner-a',displayName:'A',email:'a@example.test'};
 globalThis.securityTest={apiBoundary,readJsonObject,jsonBodyFailure,mutationGuard,recordQuery,recordPage,RecordQueryError,purchaseRecordId,validPurchaseKey,samePurchaseInput,schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser:async()=>user,storage:async()=>({db,bucket}),catalogDb:async()=>({db,bucket}),shareHeaders:{'Cache-Control':'no-store'}};
-async function route(path){const source=readFileSync(path,'utf8').replace(/^import .*;\r?\n/gm,'');const setup='const {apiBoundary,readJsonObject,jsonBodyFailure,mutationGuard,recordQuery,recordPage,RecordQueryError,purchaseRecordId,validPurchaseKey,samePurchaseInput,schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser,storage,catalogDb,shareHeaders}=globalThis.securityTest;\n';return import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(setup+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));}
+async function route(path){const source=readFileSync(path,'utf8').replace(/^import .*;\r?\n/gm,'');const setup='const {apiBoundary,readJsonObject,jsonBodyFailure,mutationGuard,recordQuery,recordPage,RecordQueryError,purchaseRecordId,validPurchaseKey,samePurchaseInput,schemas,allowedSeller,purchaseText,boundedUpload,verifyDocument,UploadError,z,getChatGPTUser,storage,catalogDb,shareHeaders}=globalThis.securityTest;\n';return import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule('const collectPhotoObjects=async()=>{};\n'+setup+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));}
 const records=await route('app/api/records/route.ts'),documents=await route('app/api/documents/route.ts'),document=await route('app/api/documents/[id]/route.ts'),requests=await route('app/api/purchase-request/[id]/route.ts'),shares=await route('app/api/car-catalog/route.ts'),publicShare=await route('app/api/shared-car/[token]/route.ts');
 const carA=crypto.randomUUID(),carB=crypto.randomUUID();
 const car={name:'TEST Honda',year:2003,engine:'3.0',vin:'1HGCM82633A004352',mileage:100,nextService:200};
@@ -74,7 +74,7 @@ try{
   await denied(await documents.POST(input.request),413,'PAYLOAD_TOO_LARGE');assert.equal(input.pulls,2);assert.equal(input.cancelled,true);
  }
  // The same JSON is valid at the exact byte boundary, including multibyte text.
- const valid=JSON.stringify({kind:'car',data:{...car,name:'Авто Україна'}});const bytes=new TextEncoder().encode(valid).length;
+ const valid=JSON.stringify({kind:'car',data:{...car,vin:'JHMCM56543C123456',name:'Авто Україна'}});const bytes=new TextEncoder().encode(valid).length;
  const exact=new Request(MOTORNA_ORIGIN+'/api/records',{method:'POST',headers:{Origin:MOTORNA_ORIGIN,'Content-Type':'application/json'},body:valid+' '.repeat(60000-bytes)});
  const accepted=await records.POST(exact);assert.equal(accepted.status,201);const acceptedId=(await accepted.json()).record.id;
  assert.equal((await records.DELETE(new Request(MOTORNA_ORIGIN+'/api/records?id='+acceptedId,{method:'DELETE',headers:{Origin:MOTORNA_ORIGIN}}))).status,200);assert.deepEqual(state(),expected);

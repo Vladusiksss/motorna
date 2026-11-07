@@ -18,7 +18,7 @@ let owner='a';
 globalThis.paginationTest={apiBoundary,recordQuery,recordPage,RecordQueryError,getChatGPTUser:async()=>owner?{userId:owner,displayName:'Test',email:'test@example.test'}:null,storage:async()=>({db:{prepare(sql){let values=[];return {bind(...v){values=v;return this;},async all(){return {results:db.prepare(sql).all(...values)};},async first(){return db.prepare(sql).get(...values)||null;}};}}})};
 const source=readFileSync('app/api/records/route.ts','utf8').replace(/^import .*;\r?\n/gm,'');
 const setup='const {apiBoundary,recordQuery,recordPage,RecordQueryError,getChatGPTUser,storage}=globalThis.paginationTest;';
-const route=await import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(setup+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));
+const route=await import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule('const collectPhotoObjects=async()=>{};\n'+setup+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));
 const response=query=>route.GET(new Request('https://test/api/records'+(query?'?'+query:'')));
 const page=async params=>{const r=await response(params);assert.equal(r.status,200);assert.equal(r.headers.get('cache-control'),'private, no-store');return r.json();};
 try{

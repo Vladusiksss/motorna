@@ -1,6 +1,6 @@
 import {test,expect,type Page} from '@playwright/test';
 const headers={Origin:'http://localhost:5173'};
-const car={name:'Safety fixture',year:2003,engine:'3.0',vin:'1HGCM82633A004352',mileage:0,nextService:0};
+const carFixture=()=>({name:'Safety fixture',year:2003,engine:'3.0',vin:'JHMCM5654'+crypto.randomUUID().replace(/-/g,'').slice(0,8).toUpperCase(),mileage:0,nextService:0});
 const line={title:'Safety part',part:'Термостат',oem:'TEST123',quantity:1,dataMode:'inquiry',fitment:'unverified'};
 function data(kind:string,carId:string){return kind==='expense'?{carId,title:'Safety expense',date:'2026-11-06',amount:10,mileage:0}:kind==='searchHistory'?{carId,vehicle:'Safety fixture',problem:'Noise',parts:['Термостат'],results:[],videos:[]}:{carId,lines:[line],note:'',status:'draft'};}
 async function create(page:Page,kind:string,payload:unknown,key?:string){return page.request.post('/api/records',{headers:{...headers,...(key?{'Idempotency-Key':key}:{})},data:{kind,data:payload}});}
@@ -9,7 +9,7 @@ async function cleanup(page:Page,ids:string[]){for(const id of ids)expect([200,4
 async function failure(response:Awaited<ReturnType<typeof remove>>,status:number,code:string){expect(response.status()).toBe(status);const body=await response.json();expect(body.code).toBe(code);expect(body.requestId).toBe(response.headers()['x-request-id']);expect(body.message).toBeTruthy();}
 
 test('existing dependents restrict car deletion; stale and repeated operations cannot recreate them',async({page})=>{
- await page.goto('/signin-with-chatgpt?return_to=/');let carId='',token='';const ids:string[]=[];
+ const car=carFixture();await page.goto('/signin-with-chatgpt?return_to=/');let carId='',token='';const ids:string[]=[];
  try{
   const result=await create(page,'car',car);expect(result.status()).toBe(201);carId=(await result.json()).record.id;
   for(const kind of ['expense','searchHistory','purchaseRequest']){const response=await create(page,kind,data(kind,carId));expect(response.status()).toBe(201);ids.push((await response.json()).record.id);}
@@ -27,7 +27,7 @@ test('existing dependents restrict car deletion; stale and repeated operations c
 });
 
 test('concurrent keyed retries, oversized writes and bad Origins preserve the original draft',async({page})=>{
- await page.goto('/signin-with-chatgpt?return_to=/');let carId='',draftId='';
+ const car=carFixture();await page.goto('/signin-with-chatgpt?return_to=/');let carId='',draftId='';
  try{
   const result=await create(page,'car',car);expect(result.status()).toBe(201);carId=(await result.json()).record.id;
   const key=crypto.randomUUID(),payload=data('purchaseRequest',carId);

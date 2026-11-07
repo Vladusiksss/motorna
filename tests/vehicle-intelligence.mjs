@@ -1,0 +1,80 @@
+import assert from 'node:assert/strict';
+import {registerHooks} from 'node:module';
+import {pathToFileURL} from 'node:url';
+import {readFileSync} from 'node:fs';
+import {DatabaseSync} from 'node:sqlite';
+const sqlite=new DatabaseSync(':memory:');
+sqlite.exec(readFileSync('drizzle/0000_conscious_richard_fisk.sql','utf8'));
+for(let i=0;i<2;i++)sqlite.exec(readFileSync('drizzle/0002_vehicle_photo_search.sql','utf8'));
+const db={prepare(sql){let args=[];return {bind(...v){args=v;return this;},async first(){return sqlite.prepare(sql).get(...args)||null;},async all(){return {results:sqlite.prepare(sql).all(...args)};},async run(){const r=sqlite.prepare(sql).run(...args);return {success:true,meta:{changes:Number(r.changes)}};}};}};
+const objects=new Map(),bucket={async put(k,b){objects.set(k,new Uint8Array(b));},async get(k){return objects.has(k)?{body:objects.get(k)}:null;},async delete(k){objects.delete(k);}};
+let user={userId:'owner-a'},config={};const tasks=[];
+globalThis.photoTest={storage:async()=>({db,bucket}),runtimeConfig:async()=>config,getChatGPTUser:async()=>user,waitUntil:p=>tasks.push(p)};
+const fixture='data:text/javascript,'+encodeURIComponent('export const {storage,runtimeConfig,getChatGPTUser,waitUntil}=globalThis.photoTest;');
+registerHooks({resolve(s,c,next){
+ if(['@/db/storage','../runtime-config','@/app/chatgpt-auth','cloudflare:workers'].includes(s))return {url:fixture,shortCircuit:true};
+ if(s.startsWith('@/'))s=pathToFileURL(process.cwd()+'/'+s.slice(2)+'.ts').href;
+ try{return next(s,c);}catch(e){if(s.startsWith('.')&&!s.endsWith('.ts'))return next(s+'.ts',c);throw e;}
+}});
+const {vinSchema,matchVehicle,dedupePhotos,safePhotoUrl}=await import('../app/vehicle-intelligence/contracts.ts');
+const {lookupPaid,providerAccess}=await import('../app/vehicle-intelligence/providers.ts');
+const store=await import('../app/vehicle-intelligence/store.ts');
+const {startPhotos}=await import('../app/vehicle-intelligence/service.ts');
+const route=await import('../app/api/vehicle-photos/route.ts');
+const {verifyPhoto}=await import('../app/vehicle-intelligence/upload.ts');
+const vin='1HGCM82633A004352',otherVin='JHMCM56543C123456',origin='https://motorna-auto-space.bilogrivijvladislav.chatgpt.site';
+const v={vin,make:'HONDA',model:'Accord',year:'2003',body:'sedan',color:'#20232a'};
+const c={VEHICLES_DEV_ENABLED:'true',VEHICLES_DEV_API_KEY:'TEST-KEY-NOT-REAL',VEHICLES_DEV_PHOTO_RIGHTS_CONFIRMED:'true',VEHICLES_DEV_IMAGE_HOSTS:'static.cargurus.com'};
+const payload={vin,source:'vehicles.dev',photos:['https://static.cargurus.com/photo.jpg','https://static.cargurus.com/photo.jpg','http://127.0.0.1/a.jpg'],listingUrl:'https://example.com/listing/1',galleryComplete:true,galleryCount:3,photoCount:3};
+assert.equal(vinSchema.parse(' '+vin.toLowerCase()+' '),vin);for(const value of ['',vin+'A','I'.repeat(17)])assert.equal(vinSchema.safeParse(value).success,false);
+assert.equal(matchVehicle(vin,vin),'EXACT_VIN_MATCH');assert.equal(matchVehicle(vin,otherVin),'CONFLICT');assert.equal(matchVehicle(vin,undefined,true),'MODEL_MATCH');assert.equal(matchVehicle(vin),'NO_MATCH');
+for(const url of ['http://static.cargurus.com/a','https://static.cargurus.com.evil.test/a','https://127.0.0.1/a','https://user:pass@static.cargurus.com/a','https://static.cargurus.com/a?api_key=secret'])assert.equal(safePhotoUrl(url,['static.cargurus.com']),null);
+assert.equal(providerAccess('auto_dev',{}),'disabled');assert.equal(providerAccess('auto_dev',{AUTO_DEV_ENABLED:'true'}),'missing_key');assert.equal(providerAccess('vehicles_dev',{...c,VEHICLES_DEV_PHOTO_RIGHTS_CONFIRMED:'false'}),'license_required');
+let result=await lookupPaid('vehicles_dev',v,c,async()=>true,async()=>Response.json(payload));assert.equal(result.state.status,'ok');assert.equal(result.photos.length,1);assert.equal(result.photos[0].match,'EXACT_VIN_MATCH');assert.equal(dedupePhotos([...result.photos,...result.photos]).length,1);
+result=await lookupPaid('vehicles_dev',v,c,async()=>true,async()=>Response.json({...payload,vin:otherVin}));assert.equal(result.state.status,'conflict');assert.equal(result.photos.length,0);
+result=await lookupPaid('auto_dev',v,{AUTO_DEV_ENABLED:'true',AUTO_DEV_API_KEY:'test',AUTO_DEV_PHOTO_RIGHTS_CONFIRMED:'true',AUTO_DEV_IMAGE_HOSTS:'static.cargurus.com'},async()=>true,async()=>Response.json({data:{retail:payload.photos.slice(0,1)}}));assert.equal(result.photos[0].match,'MODEL_MATCH','VIN-only endpoint without echoed VIN is not strict exact-VIN proof');
+for(const [http,expected] of [[401,'unauthorized'],[403,'unauthorized'],[404,'no_match'],[429,'rate_limited'],[500,'unavailable']]){
+ let n=0;result=await lookupPaid('vehicles_dev',v,c,async()=>true,async()=>{n++;return new Response(null,{status:http});});assert.equal(result.state.status,expected);assert.equal(n,http===500?2:1);
+}
+result=await lookupPaid('vehicles_dev',v,c,async()=>true,async()=>{throw new DOMException('slow','TimeoutError');});assert.equal(result.state.status,'timeout');
+result=await lookupPaid('vehicles_dev',v,c,async()=>false,async()=>{throw Error('must not call');});assert.equal(result.state.status,'budget_exhausted');
+for(const bad of [{},'<html>captcha</html>',{...payload,photos:[4]}]){result=await lookupPaid('vehicles_dev',v,c,async()=>true,async()=>Response.json(bad));assert.equal(result.state.status,'invalid_response');}
+result=await lookupPaid('vehicles_dev',v,c,async()=>true,async()=>Response.json({...payload,photos:[]}));assert.equal(result.state.status,'no_match');
+const carId=crypto.randomUUID(),car={name:'HONDA Accord',make:'HONDA',model:'Accord',year:2003,engine:'',vin,mileage:0,nextService:0,specifications:[{label:'Кузов',value:'Седан'},{label:'Колір',value:'чорний'}]};
+sqlite.prepare('INSERT INTO records VALUES(?,?,?,?,?)').run(carId,'owner-a','car',JSON.stringify(car),1);
+assert.deepEqual(await store.ownedVehicle('owner-a',carId),v);await assert.rejects(()=>store.ownedVehicle('owner-b',carId),e=>e.status===404);
+const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLttAAAAABJRU5ErkJggg==','base64');
+verifyPhoto(png.buffer.slice(png.byteOffset,png.byteOffset+png.byteLength),'image/png');assert.throws(()=>verifyPhoto(new TextEncoder().encode('<svg/>').buffer,'image/png'));
+let calls=0;const realFetch=globalThis.fetch;config=c;
+globalThis.fetch=async url=>{calls++;assert.ok(String(url).startsWith('https://api.vehicles.dev/')||String(url).startsWith('https://commons.wikimedia.org/'));return Response.json(String(url).includes('commons.')?{}:payload);};
+const wait=async()=>{await Promise.all(tasks.splice(0));};
+await Promise.all([startPhotos('owner-a',carId),startPhotos('owner-a',carId)]);await wait();assert.equal(calls,2,'one VIN job, one API call per enabled provider');
+let g=await store.gallery('owner-a',carId);assert.equal(g.status,'complete');assert.equal(g.photos.length,1);assert.equal(g.photos[0].match,'EXACT_VIN_MATCH');assert.ok(g.providers.some(p=>p.provider==='auto_ria'&&p.status==='agreement_required'));
+await startPhotos('owner-a',carId);await wait();assert.equal(calls,2,'persistent cache avoids paid calls');await assert.rejects(()=>startPhotos('owner-a',carId,true),e=>e.status===429);
+config={...c,AUTO_DEV_ENABLED:'true',AUTO_DEV_API_KEY:'test',AUTO_DEV_PHOTO_RIGHTS_CONFIRMED:'true',AUTO_DEV_IMAGE_HOSTS:'static.cargurus.com'};
+globalThis.fetch=async url=>String(url).startsWith('https://api.auto.dev/')?new Response(null,{status:500}):Response.json(String(url).includes('commons.')?{}:payload);
+sqlite.prepare('UPDATE vehicle_photo_search SET retry_at=0 WHERE car_id=?').run(carId);
+await startPhotos('owner-a',carId,true);await wait();g=await store.gallery('owner-a',carId);assert.equal(g.status,'partial');assert.equal(g.photos.length,1,'one provider failure preserves another provider result');
+const req=(method,body,query='',headers={})=>new Request(origin+'/api/vehicle-photos'+query,{method,headers:{Origin:origin,...(body&&!(body instanceof FormData)?{'Content-Type':'application/json'}:{}),...headers},body:body instanceof FormData?body:body?JSON.stringify(body):undefined});
+user=null;assert.equal((await route.GET(req('GET',undefined,'?carId='+carId))).status,401);
+user={userId:'owner-b'};for(const method of ['GET','DELETE'])assert.equal((await route[method](req(method,undefined,'?carId='+carId))).status,404);
+assert.equal((await route.PATCH(req('PATCH',{carId,primaryId:g.photos[0].id}))).status,404);
+user={userId:'owner-a'};assert.equal((await route.POST(req('POST',{carId},'',{Origin:'https://evil.test'}))).status,403);
+assert.equal((await route.PATCH(req('PATCH',{carId,primaryId:crypto.randomUUID()}))).status,404,'an arbitrary primary image is rejected');
+assert.equal((await route.POST(new Request(origin+'/api/vehicle-photos',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:'x'.repeat(1001)}))).status,413);
+let r=await route.PATCH(req('PATCH',{carId,primaryId:g.photos[0].id}));assert.equal(r.status,200);assert.equal((await r.json()).primaryId,g.photos[0].id);
+r=await route.PATCH(req('PATCH',{carId,hideExternal:true}));assert.equal((await r.json()).photos.length,0);await route.PATCH(req('PATCH',{carId,hideExternal:false}));
+function form(rights=true){const f=new FormData();f.set('carId',carId);f.set('file',new File([png],'photo.png',{type:'image/png'}));if(rights)f.set('rightsConfirmed','true');return f;}
+assert.equal((await route.POST(req('POST',form(false)))).status,400);
+for(let i=0;i<2;i++){r=await route.POST(req('POST',form()));assert.equal(r.status,201);}
+g=await store.gallery('owner-a',carId);assert.equal(g.photos.filter(p=>p.owned).length,1);assert.equal(objects.size,1,'duplicate uploads do not create extra objects');
+const owned=g.photos.find(p=>p.owned);assert.equal(owned.objectKey,undefined);r=await route.GET(req('GET',undefined,`?carId=${carId}&photoId=${owned.id}`));assert.equal(r.status,200);assert.equal(r.headers.get('cross-origin-resource-policy'),'same-origin');
+user={userId:'owner-b'};assert.equal((await route.GET(req('GET',undefined,`?carId=${carId}&photoId=${owned.id}`))).status,404);user={userId:'owner-a'};
+await route.DELETE(req('DELETE',undefined,'?carId='+carId));g=await store.gallery('owner-a',carId);assert.equal(g.photos.length,1);assert.ok(g.photos[0].owned,'clear search preserves private uploads');
+const late={...owned,id:crypto.randomUUID(),url:'https://static.cargurus.com/late.jpg',owned:false};assert.equal(await store.savePhoto('owner-a',carId,vin,late,'cancelled-lease'),false);
+sqlite.prepare('UPDATE records SET payload=? WHERE id=?').run(JSON.stringify({...car,vin:otherVin}),carId);assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM vehicle_photos').get().n,0);await store.collectPhotoObjects();assert.equal(objects.size,0,'VIN change removes old photo objects');
+assert.equal(await store.savePhoto('owner-a',carId,vin,late),false,'old VIN cannot reappear');
+sqlite.prepare('DELETE FROM records WHERE id=?').run(carId);assert.equal(await store.savePhoto('owner-a',carId,otherVin,late),false,'deleted vehicle cannot gain late photos');
+assert.equal(await store.reserveBudget('test-budget',1),true);assert.equal(await store.reserveBudget('test-budget',1),false);
+globalThis.fetch=realFetch;sqlite.close();delete globalThis.photoTest;
+console.log('PASS: VIN classification, documented provider mocks/HTTP errors/timeouts/budget, URL allowlists, idempotent migration, durable job dedupe/cache, auth/CSRF, bounded JSON, owner-only uploads/primary/hide/delete, VIN/deletion race guards and R2 cleanup');

@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 test('browser writes work and rejected mutations leave records unchanged',async({page})=>{
  await page.goto('/signin-with-chatgpt?return_to=/');
- const car={name:'CSRF test',year:2003,engine:'3.0',vin:'1HGCM82633A004352',mileage:0,nextService:0};
+ const car={name:'CSRF test',year:2003,engine:'3.0',vin:'JHMCM5654'+crypto.randomUUID().replace(/-/g,'').slice(0,8).toUpperCase(),mileage:0,nextService:0};
  const created=await page.evaluate(async data=>{const r=await fetch('/api/records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'car',data})});return {status:r.status,body:await r.json() as {record:{id:string}}};},car);expect(created.status).toBe(201);const id=created.body.record.id;
  try{
   const attacks:Record<string,string>[]=[{},{Origin:'null'},{Origin:'https://evil.test'},{Origin:'http://localhost:5173','Sec-Fetch-Site':'same-site'}];

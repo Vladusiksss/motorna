@@ -59,3 +59,7 @@ Playwright охоплює desktop/mobile, контрольований збій 
 ## Підготовлена міграція грошей
 
 Money-v2: цілі minor units і явна валюта, dry-run на копії, SQLite/D1-пакети та відкат. Це підготовка, не перехід робочого застосунку: [MONEY_MIGRATION.md](MONEY_MIGRATION.md).
+
+## VIN Intelligence & photos
+
+See [provider configuration, rights, API, storage and verification](docs/VIN_INTELLIGENCE.md). Private per-car gallery, strict source-VIN evidence, licensed model illustrations and owner uploads; commercial sources default off.

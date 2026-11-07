@@ -16,7 +16,7 @@ let user={userId:'owner-a'},beforeWrite;
 const db={prepare(sql){let args=[];return {bind(...v){args=v;return this;},async first(){return sqlite.prepare(sql).get(...args)||null;},async all(){return {results:sqlite.prepare(sql).all(...args)};},async run(){if(beforeWrite)await beforeWrite(sql,args);const result=sqlite.prepare(sql).run(...args);return {success:true,meta:{changes:Number(result.changes)}};}};}};
 globalThis.integrityTest={apiBoundary,readJsonObject,jsonBodyFailure,mutationGuard,recordQuery,recordPage,RecordQueryError,schemas,purchaseRecordId,validPurchaseKey,samePurchaseInput,allowedSeller,getChatGPTUser:async()=>user,storage:async()=>({db})};
 const source=readFileSync('app/api/records/route.ts','utf8').replace(/^import .*;\r?\n/gm,'');
-const setup='const {apiBoundary,readJsonObject,jsonBodyFailure,mutationGuard,recordQuery,recordPage,RecordQueryError,schemas,purchaseRecordId,validPurchaseKey,samePurchaseInput,allowedSeller,getChatGPTUser,storage}=globalThis.integrityTest;';
+const setup='const collectPhotoObjects=async()=>{};const {apiBoundary,readJsonObject,jsonBodyFailure,mutationGuard,recordQuery,recordPage,RecordQueryError,schemas,purchaseRecordId,validPurchaseKey,samePurchaseInput,allowedSeller,getChatGPTUser,storage}=globalThis.integrityTest;';
 const route=await import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(setup+source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));
 const car={name:'Test car',year:2021,engine:'2.0',vin:'1HGCM82633A004352',mileage:0,nextService:0};
 function addCar(){const id=crypto.randomUUID();sqlite.prepare('INSERT INTO records VALUES (?,?,?,?,?)').run(id,'owner-a','car',JSON.stringify(car),1);return id;}
@@ -27,6 +27,8 @@ const remove=id=>route.DELETE(new Request(MOTORNA_ORIGIN+'/api/records?id='+id,{
 function pauseWrite(predicate){let notify,release;const reached=new Promise(r=>notify=r),wait=new Promise(r=>release=r);beforeWrite=async(sql,args)=>{if(predicate(sql,args)){beforeWrite=undefined;notify();await wait;}};return {reached,release};}
 function assertNoOrphans(){assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM records AS child WHERE json_extract(child.payload,'$.carId') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM records AS parent WHERE parent.id=json_extract(child.payload,'$.carId') AND parent.owner=child.owner AND parent.kind='car')").get().n,0);}
 try{
+ const createCar=()=>route.POST(new Request(MOTORNA_ORIGIN+'/api/records',{method:'POST',headers:{Origin:MOTORNA_ORIGIN,'Content-Type':'application/json'},body:JSON.stringify({kind:'car',data:car})}));
+ const repeatedCreates=await Promise.all(Array.from({length:8},createCar));const saved=await Promise.all(repeatedCreates.map(r=>r.json()));assert.equal(new Set(saved.map(r=>r.record.id)).size,1);assert.equal(saved.filter(r=>r.createdNew).length,1);assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM records WHERE kind='car'").get().n,1);await remove(saved[0].record.id);
  for(const [kind,keyed] of [['expense',false],['searchHistory',false],['purchaseRequest',false],['purchaseRequest',true]]){
   // Parent disappears after authorization SELECT but before INSERT.
   let carId=addCar();const insertGate=pauseWrite((sql,args)=>sql.startsWith('INSERT INTO records')&&args[2]===kind);

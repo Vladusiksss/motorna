@@ -1,3 +1,4 @@
+import {collectPhotoObjects} from '@/app/vehicle-intelligence/store';
 import {apiBoundary} from '@/app/api-response';
 import {readJsonObject,jsonBodyFailure} from '@/app/json-body';
 import {mutationGuard} from '@/app/mutation-security';
@@ -32,8 +33,16 @@ const id=requestKey?await purchaseRecordId(user.userId,requestKey):crypto.random
 // Authorization is checked again inside the write: a DELETE may run after the earlier read.
 const insert=relatedCarId
  ?db.prepare("INSERT INTO records (id,owner,kind,payload,created) SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM records WHERE id=? AND owner=? AND kind='car') ON CONFLICT(id) DO NOTHING").bind(id,user.userId,body.kind,JSON.stringify(parsed.data),created,relatedCarId,user.userId)
+ :body.kind==='car'&&schemas.car.parse(parsed.data).vin
+ ?db.prepare("INSERT INTO records (id,owner,kind,payload,created) SELECT ?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM records WHERE owner=? AND kind='car' AND json_extract(payload,'$.vin')=?) ON CONFLICT(id) DO NOTHING").bind(id,user.userId,body.kind,JSON.stringify(parsed.data),created,user.userId,schemas.car.parse(parsed.data).vin)
  :db.prepare('INSERT INTO records (id,owner,kind,payload,created) VALUES (?,?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(id,user.userId,body.kind,JSON.stringify(parsed.data),created);
 const inserted=await insert.run();
+if(body.kind==='car'&&schemas.car.parse(parsed.data).vin){
+ const saved=await db.prepare("SELECT id,payload,created FROM records WHERE owner=? AND kind='car' AND json_extract(payload,'$.vin')=? ORDER BY created,id LIMIT 1").bind(user.userId,schemas.car.parse(parsed.data).vin).first<{id:string;payload:string;created:number}>();
+ if(!saved)return fail('Автомобіль уже видалено.',404);
+ return Response.json({createdNew:inserted.meta.changes>0,record:{id:saved.id,kind:'car',data:JSON.parse(saved.payload),created:saved.created}},{status:201,headers:privateHeaders});
+}
+
 if(relatedCarId&&!requestKey&&inserted.meta.changes===0)return fail('Автомобіль уже видалено або недоступний.',404);
 if(requestKey){
  const saved=await db.prepare('SELECT id,kind,payload,created FROM records WHERE id=? AND owner=?').bind(id,user.userId).first<{id:string;kind:string;payload:string;created:number}>();
@@ -50,6 +59,7 @@ export async function DELETE(request:Request){
 const user=await getChatGPTUser();if(!user)return fail('Потрібен вхід.',401);const denied=mutationGuard(request);if(denied)return denied;const id=new URL(request.url).searchParams.get('id');if(!id||!/^[a-f0-9-]{36}$/.test(id))return fail('Невірний запис.');try{const {db}=await storage();const row=await db.prepare('SELECT kind FROM records WHERE id = ? AND owner = ?').bind(id,user.userId).first();if(!row)return fail('Запис не знайдено.',404);// The existence check and DELETE must be one statement; otherwise a child INSERT can win the gap.
 const deleted=await db.prepare("DELETE FROM records WHERE id=? AND owner=? AND (kind<>'car' OR NOT EXISTS (SELECT 1 FROM records AS child WHERE child.owner=records.owner AND json_extract(child.payload,'$.carId')=records.id))").bind(id,user.userId).run();
 if(deleted.meta.changes===0){const exists=await db.prepare('SELECT id FROM records WHERE id=? AND owner=?').bind(id,user.userId).first();return exists?fail('Спершу видаліть пов’язані витрати, історію пошуку та запити цього автомобіля.',409):fail('Запис уже видалено.',404);}
+try{await collectPhotoObjects();}catch{console.warn('vehicle_photo_gc_deferred');}
 return Response.json({ok:true});}catch(e){console.error('records delete',e);return fail('Не вдалося видалити. Спробуйте ще раз.',503);}
  },"/api/records");
 }
@@ -60,7 +70,7 @@ export async function PATCH(request:Request){
 
  const user=await getChatGPTUser();if(!user)return fail('Потрібен вхід.',401);
  const denied=mutationGuard(request);if(denied)return denied;
- try{const bodyJson=await readJsonObject(request,60000);const body=bodyJson;if(typeof body.id!=='string')return fail('Невірний запис.');const {db}=await storage();const existing=await db.prepare('SELECT kind,created FROM records WHERE id = ? AND owner = ?').bind(body.id,user.userId).first();if(!existing)return fail('Запис не знайдено.',404);if(existing.kind!=='car')return fail('Редагування цього типу недоступне.');const parsed=schemas.car.safeParse(body.data);if(!parsed.success)return fail('Перевірте заповнення полів.');const updated=await db.prepare('UPDATE records SET payload = ? WHERE id = ? AND owner = ?').bind(JSON.stringify(parsed.data),body.id,user.userId).run();if(updated.meta.changes===0)return fail('Автомобіль уже видалено.',404);return Response.json({record:{id:body.id,kind:'car',data:parsed.data,created:existing.created}});
+ try{const bodyJson=await readJsonObject(request,60000);const body=bodyJson;if(typeof body.id!=='string')return fail('Невірний запис.');const {db}=await storage();const existing=await db.prepare('SELECT kind,created FROM records WHERE id = ? AND owner = ?').bind(body.id,user.userId).first();if(!existing)return fail('Запис не знайдено.',404);if(existing.kind!=='car')return fail('Редагування цього типу недоступне.');const parsed=schemas.car.safeParse(body.data);if(!parsed.success)return fail('Перевірте заповнення полів.');const updated=await db.prepare('UPDATE records SET payload = ? WHERE id = ? AND owner = ?').bind(JSON.stringify(parsed.data),body.id,user.userId).run();if(updated.meta.changes===0)return fail('Автомобіль уже видалено.',404);try{await collectPhotoObjects();}catch{console.warn('vehicle_photo_gc_deferred');}return Response.json({record:{id:body.id,kind:'car',data:parsed.data,created:existing.created}});
  }catch(e){const rejected=jsonBodyFailure(e);if(rejected)return rejected;console.error('records update',e);return fail('Не вдалося оновити автомобіль. Спробуйте ще раз.',503);}
 
  },"/api/records");

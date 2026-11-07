@@ -5,5 +5,5 @@ export default defineConfig({
  reporter:[['list'],['html',{open:'never'}]],
  use:{baseURL:'http://localhost:5173',trace:'retain-on-failure',screenshot:'only-on-failure'},
  projects:[{name:'desktop',use:{viewport:{width:1440,height:1000}}},{name:'mobile',use:{viewport:{width:375,height:812},isMobile:true,hasTouch:true}}],
- webServer:{command:`"${process.execPath}" scripts/run-framework.mjs dev --host 127.0.0.1`,url:'http://localhost:5173',reuseExistingServer:!process.env.CI,timeout:120000},
+ webServer:{command:`"${process.execPath}" scripts/run-framework.mjs dev --host 127.0.0.1`,url:'http://localhost:5173',reuseExistingServer:false,env:{MOTORNA_LOCAL_DATA_DIR:'.sites-runtime/e2e-'+Date.now(),VEHICLE_COMMONS_ENABLED:'false',AUTO_DEV_ENABLED:'false',VEHICLES_DEV_ENABLED:'false'},timeout:120000},
 });

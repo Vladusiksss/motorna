@@ -3,7 +3,10 @@
 import {DatabaseSync,type SQLInputValue} from 'node:sqlite';
 import {mkdirSync,readFileSync,readdirSync,existsSync,writeFileSync,unlinkSync} from 'node:fs';
 import {join,resolve} from 'node:path';
-const root=resolve('.sites-runtime/local-data');mkdirSync(root,{recursive:true});
+const runtimeRoot=resolve('.sites-runtime');
+const root=resolve(process.env.MOTORNA_LOCAL_DATA_DIR||'.sites-runtime/local-data');
+if(!root.startsWith(runtimeRoot+String.fromCharCode(92))&&!root.startsWith(runtimeRoot+'/'))throw new Error('Local storage must stay inside .sites-runtime');
+mkdirSync(root,{recursive:true});
 const db=new DatabaseSync(join(root,'motorna.sqlite'));
 db.exec('CREATE TABLE IF NOT EXISTS local_migrations (name TEXT PRIMARY KEY)');
 for(const name of readdirSync(resolve('drizzle')).filter(n=>n.endsWith('.sql')).sort()){

@@ -23,3 +23,5 @@ See DATA_LIFECYCLE.md. Server deletion remains owner-scoped, explicitly confirme
 
 ## Operational scope
 Cloudflare D1/R2 backup/restore was explicitly deferred by the owner in this iteration; it is not configured or marked verified. Telegram alerts remain disabled by the owner's earlier instruction. Neither successful builds nor saved source versions count as a data backup.
+
+Bulk E2E fixtures honor real 429 Retry-After responses. CI runs desktop and mobile against one local test identity, so fixture insertion/cleanup can reach the shared write budget; this is not bypassed by disabling the production limiter.

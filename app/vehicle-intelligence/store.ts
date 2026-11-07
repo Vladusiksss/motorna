@@ -32,8 +32,9 @@ export async function gallery(owner:string,carId:string):Promise<Gallery>{
  const found=await db.prepare('SELECT payload FROM vehicle_photos WHERE owner=? AND car_id=? AND vin=? AND expires>? ORDER BY object_key IS NOT NULL DESC,id LIMIT 60').bind(owner,carId,v.vin,Date.now()).all<{payload:string}>();
  const photos=found.results.flatMap(r=>{const p=photoSchema.safeParse(JSON.parse(r.payload));if(!p.success)return [];const safe=photoSchema.omit({objectKey:true}).parse(p.data);return [{...safe,url:safe.owned?`/api/vehicle-photos?carId=${carId}&photoId=${safe.id}`:safe.url}];});
  const providers=providerStatusSchema.array().parse(JSON.parse(row?.providers||'[]'));
- const status=row?.status==='running'&&row.lease_until<Date.now()?'failed':row?.status||'idle';
- return {carId,vin:v.vin,status,photos:row?.hide_external?photos.filter(p=>p.owned):photos,providers,primaryId:photos.some(p=>p.id===row?.primary_id)?row!.primary_id:null,hideExternal:!!row?.hide_external,checkedAt:row?.checked||0,retryAt:row?.retry_at||0};
+ const legacy=providers.length>0&&!providers.some(p=>p.provider==='public_vin_search');
+ const status=legacy&&row?.status!=='running'?'idle':row?.status==='running'&&row.lease_until<Date.now()?'failed':row?.status||'idle';
+ return {carId,vin:v.vin,status,photos:row?.hide_external?photos.filter(p=>p.owned):photos,providers,primaryId:photos.some(p=>p.id===row?.primary_id)?row!.primary_id:null,hideExternal:!!row?.hide_external,checkedAt:row?.checked||0,retryAt:legacy?0:row?.retry_at||0};
 }
 export async function reserveBudget(scope:string,limit:number){
  const {db}=await storage(),day=new Date().toISOString().slice(0,10);
@@ -41,8 +42,11 @@ export async function reserveBudget(scope:string,limit:number){
 }
 export async function savePhoto(owner:string,carId:string,vin:string,p:VehiclePhoto,lease?:string){
  const {db}=await storage();
- const sql="INSERT INTO vehicle_photos(id,owner,car_id,vin,dedupe_key,payload,object_key,expires) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE owner=? AND id=? AND kind='car' AND json_extract(payload,'$.vin')=?)"+(p.owned?' AND ((SELECT COUNT(*) FROM vehicle_photos WHERE owner=? AND car_id=? AND object_key IS NOT NULL)<20 OR EXISTS(SELECT 1 FROM vehicle_photos WHERE owner=? AND car_id=? AND dedupe_key=?))':'')+(lease?' AND EXISTS(SELECT 1 FROM vehicle_photo_search WHERE owner=? AND car_id=? AND lease=?)':'')+(p.owned?' ON CONFLICT(owner,car_id,dedupe_key) DO NOTHING':' ON CONFLICT(owner,car_id,dedupe_key) DO UPDATE SET expires=excluded.expires,payload=json_set(excluded.payload,\'$.id\',vehicle_photos.id)');
- const r=await db.prepare(sql).bind(p.id,owner,carId,vin,p.url,JSON.stringify(p),p.objectKey||null,p.expiresAt,owner,carId,vin,...(p.owned?[owner,carId,owner,carId,p.url]:[]),...(lease?[owner,carId,lease]:[])).run();
+ // Public lookup cache is shared across owners. Never reuse its photo UUID as
+ // the global DB key; only URL dedupe is shared within an owner's vehicle.
+ const saved=p.owned?p:{...p,id:crypto.randomUUID()};
+ const sql="INSERT INTO vehicle_photos(id,owner,car_id,vin,dedupe_key,payload,object_key,expires) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE owner=? AND id=? AND kind='car' AND json_extract(payload,'$.vin')=?)"+(p.owned?' AND ((SELECT COUNT(*) FROM vehicle_photos WHERE owner=? AND car_id=? AND object_key IS NOT NULL)<20 OR EXISTS(SELECT 1 FROM vehicle_photos WHERE owner=? AND car_id=? AND dedupe_key=?))':'')+(lease?' AND EXISTS(SELECT 1 FROM vehicle_photo_search WHERE owner=? AND car_id=? AND lease=?)':'')+(p.owned?' ON CONFLICT(owner,car_id,dedupe_key) DO NOTHING':' ON CONFLICT(owner,car_id,dedupe_key) DO UPDATE SET expires=excluded.expires,payload=json_set(excluded.payload,\'$.id\',vehicle_photos.id) WHERE NOT (json_extract(vehicle_photos.payload,\'$.match\')=\'EXACT_VIN_MATCH\' AND json_extract(excluded.payload,\'$.match\')<>\'EXACT_VIN_MATCH\' AND vehicle_photos.expires>?)');
+ const r=await db.prepare(sql).bind(saved.id,owner,carId,vin,p.url,JSON.stringify(saved),p.objectKey||null,p.expiresAt,owner,carId,vin,...(p.owned?[owner,carId,owner,carId,p.url]:[]),...(lease?[owner,carId,lease]:[]),...(p.owned?[]:[Date.now()])).run();
  return r.meta.changes>0;
 }
 export async function finishJob(owner:string,carId:string,lease:string,providers:ProviderStatus[]){

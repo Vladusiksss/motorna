@@ -63,3 +63,5 @@ Money-v2: цілі minor units і явна валюта, dry-run на копії
 ## VIN Intelligence & photos
 
 See [provider configuration, rights, API, storage and verification](docs/VIN_INTELLIGENCE.md). Private per-car gallery, strict source-VIN evidence, licensed model illustrations and owner uploads; commercial sources default off.
+
+Keyless public photo search is restored: Google/DuckDuckGo discovery and supported public listing pages, with strict VIN/model separation, source links and honest blocked/empty states. This does not activate official commercial APIs. See the restored-search section in the guide above.

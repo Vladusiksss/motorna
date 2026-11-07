@@ -1,5 +1,15 @@
 # VIN Intelligence & Vehicle Photo Search
 
+## Restored public web search (2026-11-07)
+
+At the owner's explicit request, the previous **keyless public-page photo search is restored**. This supersedes the earlier API-only photo policy below. `public_vin_search` queries Google/DuckDuckGo and reads allowlisted public listing pages (AUTO.RIA, RST, Avtopoisk and auction archives bid.cars/stat.vin/autoauctionhistory). It is not an official Copart, IAA or AUTO.RIA API connection. `public_model_search` restores the previous make/model/year/body/colour lookup on supported public marketplaces. Commercial API adapters remain separate and disabled without credentials.
+
+A photo is an exact source-VIN match only when the same structured vehicle or primary detail-page heading/title explicitly identifies that VIN. A photo matched by model attributes remains illustrative. If VIN and model searches return the same image URL concurrently, an unexpired exact-VIN result takes precedence. Source URLs and rights-holder attribution remain visible; a publicly accessible photo is not represented as openly licensed. No third-party image bytes are copied into R2. No CAPTCHA solving, authenticated-page access or bot-protection bypass is performed. Sources may return no indexed results, stale links, blocked requests or inaccessible images; these are genuine empty/partial states, never simulated photos.
+
+Restored search is active by default. Set server variable `VEHICLE_WEB_PHOTOS_ENABLED=false` to disable background web jobs. CI/E2E uses this setting and mocked web responses. Public preview routes also restore their original public search behavior. Each outbound request is limited to seven seconds and one megabyte; a background search has a 19-second total abort deadline. Redirect destinations and image hosts remain allowlisted. Concurrent duplicate lookups share a promise; at most eight public lookups run per isolate. Results use a bounded 100-entry cache, one-hour positive TTL and one-minute empty/failure TTL. D1 owner/job limits continue to apply. Old API-only cached jobs are automatically rechecked once without removing owner uploads or primary selection.
+
+Regression tests now include `public-photo-search`, `vin-listing-photos`, and `web-model-photos`, covering Google/DDG links (including `.cars`/`.vin` archive domains), exact VIN vs model, mismatches, cache, blocked responses, partial results and unsafe redirects. Existing full gallery/security tests remain active.
+
 Implemented in the existing Next/Vinext application, D1 (`DB`) and R2 (`BUCKET`). No second vehicle store or replacement authentication system. Reviewed provider documentation on 2026-11-07.
 
 ## User journey
@@ -20,7 +30,7 @@ Implemented in the existing Next/Vinext application, D1 (`DB`) and R2 (`BUCKET`)
 
 ## Provider configuration (server secrets only)
 
-All commercial providers default **off**. No production fixtures or hidden free scraping fallback. A key alone is insufficient: the operator must have permission both to display the imagery and retain its metadata under the applicable contract.
+All commercial providers default **off**. No production fixtures. Public web lookup is explicit and separately identified as described above. A key alone is insufficient: the operator must have permission both to display the imagery and retain its metadata under the applicable contract.
 
 | Provider | Implemented access | Activation |
 | --- | --- | --- |
@@ -59,7 +69,7 @@ Tariffs can change. No registration, purchase, trial activation, supplier messag
 
 ## API
 
-Existing `/api/vehicle` remains the decoding entry point. Existing `/api/vin-photos` is retained for legacy previews but returns `save_vehicle_required` with no photos; it no longer scrapes listings. `/api/vehicle-image` now uses the documented Commons provider only. Old HTML extraction helpers are not in the active photo lookup pipeline.
+Existing `/api/vehicle` remains the decoding entry point. Existing `/api/vin-photos` again runs the public VIN lookup for previews; `/api/vehicle-image` combines public model lookup with Commons. Both reuse the same public-search adapters as the owner gallery.
 
 All new `/api/vehicle-photos` operations require the current signed-in owner of `carId`. Mutations use the existing strict Origin/Fetch Metadata checks; JSON is read through the bounded streaming helper. Errors use the existing `{code,message,requestId}` boundary.
 

@@ -4,8 +4,8 @@ import {decodeEntities,parseWebResults} from './vehicle-search';
 const sources=['auto.ria.com','carandclassic.com','autohelperbot.com','bid.cars','stat.vin','caranddriver.com','rst.ua','avtopoisk.ua','mobile.de','autoscout24.com','cars.com','autotrader.com'];
 const images=[...sources,'riastatic.com','img.classistatic.com','carandclassic.com','hearstapps.com','carsbase.com','mobile.de','autoscout24.net','classistatic.de','img.rst.ua'];
 function allowed(raw:string,hosts:string[]){try{const u=new URL(raw);return u.protocol==='https:'&&!u.port&&!u.username&&!u.password&&hosts.some(h=>u.hostname===h||u.hostname.endsWith('.'+h));}catch{return false;}}
-export function photoSearchLinks(html:string){const links=parseWebResults(html).map(r=>r.url);for(const m of html.matchAll(/href=["']([^"']+)["']/g)){try{let u=new URL(decodeEntities(m[1]),'https://www.google.com');if(u.hostname==='www.google.com'&&u.pathname==='/url')u=new URL(u.searchParams.get('q')||u.searchParams.get('url')||'');if(allowed(u.href,sources))links.push(u.href);}catch{}}return [...new Set(links)].filter(u=>allowed(u,sources)).slice(0,6);}
-async function read(url:string,search=false){let target=url;for(let hop=0;hop<3;hop++){if(!allowed(target,search?['www.google.com','html.duckduckgo.com']:sources))throw Error('source');const r=await fetch(target,{redirect:'manual',signal:AbortSignal.timeout(8000),headers:{Accept:'text/html'}});if(r.status>=300&&r.status<400){target=new URL(r.headers.get('location')||'',target).href;continue;}if(!r.ok)throw Error('source');const reader=r.body?.getReader();if(!reader)throw Error('source');let size=0,html='';const decoder=new TextDecoder();while(true){const v=await reader.read();if(v.done)break;size+=v.value.length;if(size>2500000){await reader.cancel();throw Error('size');}html+=decoder.decode(v.value,{stream:true});}html+=decoder.decode();if(/challenge-form|anomaly\.js|unusual traffic|\/sorry\//i.test(html))throw Error('search blocked');return {html,url:target};}throw Error('redirect');}
+export function photoSearchLinks(html:string){const links=parseWebResults(html).map(r=>r.url);for(const m of html.matchAll(/href=["']([^"']+)["']/g)){try{let u=new URL(decodeEntities(m[1]),'https://www.google.com');if(u.hostname==='www.google.com'&&u.pathname==='/url')u=new URL(u.searchParams.get('q')||u.searchParams.get('url')||'');else if(u.hostname==='duckduckgo.com'||u.hostname.endsWith('.duckduckgo.com'))u=new URL(u.searchParams.get('uddg')||'');if(allowed(u.href,sources))links.push(u.href);}catch{}}return [...new Set(links)].filter(u=>allowed(u,sources)).slice(0,6);}
+async function read(url:string,search=false,fetcher:typeof fetch=fetch,signal?:AbortSignal){let target=url;for(let hop=0;hop<3;hop++){if(!allowed(target,search?['www.google.com','html.duckduckgo.com']:sources))throw Error('source');const r=await fetcher(target,{redirect:'manual',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(7000)]):AbortSignal.timeout(7000),headers:{Accept:'text/html'}});if(r.status>=300&&r.status<400){target=new URL(r.headers.get('location')||'',target).href;continue;}if(!r.ok)throw Error('source');const reader=r.body?.getReader();if(!reader)throw Error('source');let size=0,html='';const decoder=new TextDecoder();while(true){const v=await reader.read();if(v.done)break;size+=v.value.length;if(size>1000000){await reader.cancel();throw Error('size');}html+=decoder.decode(v.value,{stream:true});}html+=decoder.decode();if(/challenge-form|anomaly\.js|unusual traffic|cf-chl-|captcha|\/sorry\//i.test(html))throw Error('search blocked');return {html,url:target};}throw Error('redirect');}
 export function extractModelPhotos(html:string,source:string,p:PhotoRequest){
  if(!allowed(source,sources))return [];
  const result:{url:string;source:string;host:string;title:string;author:string;license:string;checkedAt:string}[]=[];let structuredVehicle=false;
@@ -34,12 +34,12 @@ export function marketplaceQueries(p:PhotoRequest){
  const q=photoQuery(p);
  return [q+' (site:auto.ria.com OR site:rst.ua OR site:avtopoisk.ua)',q+' (site:mobile.de OR site:autoscout24.com OR site:carandclassic.com)',q+' for sale front'];
 }
-export async function findWebModelPhotos(p:PhotoRequest){
+export async function findWebModelPhotos(p:PhotoRequest,fetcher:typeof fetch=fetch,signal?:AbortSignal){
  const queries=marketplaceQueries(p);
  const jobs=queries.map(q=>'https://html.duckduckgo.com/html/?q='+encodeURIComponent(q));
  jobs.push('https://www.google.com/search?q='+encodeURIComponent(queries[0]));
- const searches=await Promise.allSettled(jobs.map(async url=>photoSearchLinks((await read(url,true)).html)));
- const urls=[...new Set(searches.flatMap(s=>s.status==='fulfilled'?s.value:[]))].slice(0,12);
- const pages=await Promise.allSettled(urls.map(async url=>{const page=await read(url);return extractModelPhotos(page.html,page.url,p);}));
+ const searches=await Promise.allSettled(jobs.map(async url=>photoSearchLinks((await read(url,true,fetcher,signal)).html)));
+ const urls=[...new Set(searches.flatMap(s=>s.status==='fulfilled'?s.value:[]))].slice(0,6);
+ const pages=await Promise.allSettled(urls.map(async url=>{const page=await read(url,false,fetcher,signal);return extractModelPhotos(page.html,page.url,p);}));
  return {photos:pages.flatMap(r=>r.status==='fulfilled'?r.value:[]).slice(0,3),partial:searches.some(s=>s.status==='rejected')||pages.some(s=>s.status==='rejected')};
 }

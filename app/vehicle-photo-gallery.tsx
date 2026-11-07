@@ -3,7 +3,7 @@ import {useEffect,useState} from 'react';
 import {readApi} from './api-contracts';
 import {gallerySchema,type Gallery,type VehiclePhoto} from './vehicle-intelligence/contracts';
 
-const providers:Record<string,string>={auto_dev:'Auto.dev',vehicles_dev:'Vehicles.dev',commons:'Wikimedia Commons',auto_ria:'AUTO.RIA',copart:'Copart',iaa:'IAA'};
+const providers:Record<string,string>={auto_dev:'Auto.dev',vehicles_dev:'Vehicles.dev',commons:'Wikimedia Commons',auto_ria:'AUTO.RIA API',copart:'Copart API',iaa:'IAA API',public_vin_search:'Вебпошук за VIN',public_model_search:'Вебпошук моделі'};
 const states:Record<string,string>={ok:'Знайдено',no_match:'Збігів немає',disabled:'Не підключено',missing_key:'Потрібен API-ключ',license_required:'Потрібен дозвіл на фото',agreement_required:'Потрібен договір доступу',unauthorized:'Доступ не підтверджено',rate_limited:'Ліміт джерела',timeout:'Час очікування вичерпано',unavailable:'Тимчасово недоступне',invalid_response:'Непідтримувана відповідь',conflict:'VIN джерела не збігається',budget_exhausted:'Денний ліміт запитів'};
 type Props={carId:string;name:string;compact?:boolean};
 export default function VehiclePhotoGallery(p:Props){return <GalleryContent key={p.carId} {...p}/>;}
@@ -20,7 +20,7 @@ function GalleryContent({carId,name,compact=false}:Props){
   void load();return()=>{abort.abort();if(timer)clearTimeout(timer);};
  },[carId,started]);
  async function mutate(method:string,body?:unknown,suffix=''){
-  setBusy(true);setError('');try{const form=body instanceof FormData;const r=await fetch('/api/vehicle-photos'+suffix,{method,headers:body&&!form?{'Content-Type':'application/json'}:undefined,body:body?(form?body:JSON.stringify(body)):undefined});const result=gallerySchema.parse(await readApi(r));setData(result);setStarted(x=>!x);}
+  setBusy(true);setError('');try{const form=body instanceof FormData;const r=await fetch('/api/vehicle-photos'+suffix,{method,headers:body&&!form?{'Content-Type':'application/json'}:undefined,body:body?(form?body:JSON.stringify(body)):undefined});const result=gallerySchema.parse(await readApi(r));setData(result);setBroken([]);setStarted(x=>!x);}
   catch(e){setError(e instanceof Error?e.message:'Спробуйте ще раз.');}finally{setBusy(false);}
  }
  const visible=data?.photos.filter(p=>!broken.includes(p.id))||[],primary=visible.find(p=>p.id===data?.primaryId)||visible.find(p=>p.owned)||visible.find(p=>p.match==='EXACT_VIN_MATCH')||visible[0];

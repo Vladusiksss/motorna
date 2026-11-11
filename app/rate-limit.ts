@@ -7,6 +7,10 @@ export function budgetPolicy(route:string,method:string){
  const write=!['GET','HEAD'].includes(method);
  if(route==='/api/account-data'&&write)return {scope:'erasure',limit:30};
  if(['/api/documents','/api/vehicle-photos'].includes(route)&&method==='POST')return {scope:'uploads',limit:30};
+ // Costly/public integrations get independent, conservative distributed budgets.
+ // D1-backed consumeBudget makes these limits consistent across Worker instances.
+ const externalLimits:Record<string,number>={'/api/analyze':12,'/api/vehicle':20,'/api/vin-photos':12,'/api/vehicle-image':24,'/api/web-parts':12,'/api/stations':12,'/api/station-routes':30,'/api/station-reviews':20,'/api/oem-catalog':30,'/api/parts-index':30,'/api/shared-car/[token]':120};
+ if(route in externalLimits)return {scope:'external:'+route.slice('/api/'.length),limit:externalLimits[route]};
  if(publicRoutes.has(route)&&route!=='/api/station-reviews'&&!route.startsWith('/api/shared-car/'))return {scope:'external',limit:60};
  return {scope:write?'writes':'reads',limit:write?300:600};
 }

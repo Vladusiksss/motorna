@@ -54,9 +54,20 @@ __pycache__/
 *.tsbuildinfo
 *.sqlite
 *.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
 *.db
+*.db-wal
+*.db-shm
 *.log
 *.key
+*.dump
+*.backup
+*.sql.gz
+/backup/
+/backups/
 
 # Browser test outputs
 /playwright-report/

@@ -18,11 +18,15 @@ sqlite.prepare('INSERT INTO api_rate_limits VALUES(?,?,?,?,?)').run('expired','t
 const origin='https://motorna-auto-space.bilogrivijvladislav.chatgpt.site';const request=(headers={Origin:origin})=>new Request(origin+'/api/vehicle',{method:'POST',headers:{'Content-Type':'application/json',...headers},body:'{}'});
 queries=0;assert.equal((await apiRateGuard(request({Origin:'https://evil.test'}),'/api/vehicle')).status,403);assert.equal(queries,0,'CSRF rejects before database work');
 const policy=budgetPolicy('/api/vehicle','POST');for(let i=0;i<policy.limit;i++)await consumeBudget(db,a,policy.scope,policy.limit);
+assert.deepEqual(budgetPolicy('/api/analyze','POST'),{scope:'external:analyze',limit:12});
+assert.deepEqual(budgetPolicy('/api/vin-photos','POST'),{scope:'external:vin-photos',limit:12});
+assert.deepEqual(budgetPolicy('/api/stations','POST'),{scope:'external:stations',limit:12});
+assert.notEqual(budgetPolicy('/api/analyze','POST').scope,budgetPolicy('/api/vehicle','POST').scope,'expensive public integrations have isolated budgets');
 let called=false;const denied=await apiBoundary(async()=>{called=true;return Response.json({ok:true});},'/api/vehicle',request());assert.equal(denied.status,429);assert.equal(called,false);const error=await denied.json();assert.equal(error.code,'RATE_LIMITED');assert.equal(error.requestId,denied.headers.get('x-request-id'));assert.ok(Number(denied.headers.get('retry-after'))>0);
 user={userId:'owner-b'};assert.equal(await apiRateGuard(request(),'/api/vehicle'),null);broken=true;assert.equal((await apiRateGuard(request(),'/api/vehicle')).status,503);broken=false;
 user=null;queries=0;assert.equal(await apiRateGuard(request(),'/api/records'),null);assert.equal(queries,0,'anonymous private route leaves ordinary auth refusal to handler');
 assert.equal(await apiRateGuard(request(),' /api/health'.trim()),null);
 for(const forwarded of ['1.1.1.1','2.2.2.2'])assert.equal(await apiRateGuard(request({Origin:origin,'X-Forwarded-For':forwarded}),'/api/vehicle'),null);
-const anonymous=await rateSubject('anonymous:shared');assert.equal(sqlite.prepare('SELECT calls FROM api_rate_limits WHERE subject=? AND scope=?').get(anonymous,'external').calls,2,'untrusted forwarding header cannot change key');
+const anonymous=await rateSubject('anonymous:shared');assert.equal(sqlite.prepare('SELECT calls FROM api_rate_limits WHERE subject=? AND scope=?').get(anonymous,'external:vehicle').calls,2,'untrusted forwarding header cannot change key');
 let handlers=0;function scan(dir){for(const item of readdirSync(dir,{withFileTypes:true})){const path=dir+'/'+item.name;if(item.isDirectory())scan(path);else if(item.name==='route.ts'){const source=readFileSync(path,'utf8');handlers+=(source.match(/export async function (GET|POST|DELETE|PATCH|PUT)\(/g)||[]).length;const boundary=source.match(/\},\s*['"]\/api\/[^'"]+['"],\s*\w+\);/g)||[];assert.equal(boundary.length,(source.match(/export async function (GET|POST|DELETE|PATCH|PUT)\(/g)||[]).length,path+' must pass Request to common guard');}}}scan('app/api');assert.equal(handlers,32);
 sqlite.close();console.log('Rate limits: persistent atomic budget, owner/scope/window isolation, TTL cleanup, 429/Retry-After, fail-closed storage, CSRF ordering and all API boundaries passed');

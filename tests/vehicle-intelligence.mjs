@@ -26,7 +26,9 @@ const vin='1HGCM82633A004352',otherVin='JHMCM56543C123456',origin='https://motor
 const v={vin,make:'HONDA',model:'Accord',year:'2003',body:'sedan',color:'#20232a'};
 const c={VEHICLE_WEB_PHOTOS_ENABLED:'false',VEHICLES_DEV_ENABLED:'true',VEHICLES_DEV_API_KEY:'TEST-KEY-NOT-REAL',VEHICLES_DEV_PHOTO_RIGHTS_CONFIRMED:'true',VEHICLES_DEV_IMAGE_HOSTS:'static.cargurus.com'};
 const payload={vin,source:'vehicles.dev',photos:['https://static.cargurus.com/photo.jpg','https://static.cargurus.com/photo.jpg','http://127.0.0.1/a.jpg'],listingUrl:'https://example.com/listing/1',galleryComplete:true,galleryCount:3,photoCount:3};
-assert.equal(vinSchema.parse(' '+vin.toLowerCase()+' '),vin);for(const value of ['',vin+'A','I'.repeat(17)])assert.equal(vinSchema.safeParse(value).success,false);
+assert.equal(vinSchema.parse(' '+vin.toLowerCase()+' '),vin);
+for(const value of ['',vin.slice(0,16),vin+'A',vin+'AB','I'.repeat(17),'O'.repeat(17),'Q'.repeat(17),'1HGCM82633A00435!','１２３４５６７８９０１２３４５６７'])assert.equal(vinSchema.safeParse(value).success,false,`reject invalid VIN ${value}`);
+assert.equal(vinSchema.parse(vin),vin);
 assert.equal(matchVehicle(vin,vin),'EXACT_VIN_MATCH');assert.equal(matchVehicle(vin,otherVin),'CONFLICT');assert.equal(matchVehicle(vin,undefined,true),'MODEL_MATCH');assert.equal(matchVehicle(vin),'NO_MATCH');
 for(const url of ['http://static.cargurus.com/a','https://static.cargurus.com.evil.test/a','https://127.0.0.1/a','https://user:pass@static.cargurus.com/a','https://static.cargurus.com/a?api_key=secret'])assert.equal(safePhotoUrl(url,['static.cargurus.com']),null);
 assert.equal(providerAccess('auto_dev',{}),'disabled');assert.equal(providerAccess('auto_dev',{AUTO_DEV_ENABLED:'true'}),'missing_key');assert.equal(providerAccess('vehicles_dev',{...c,VEHICLES_DEV_PHOTO_RIGHTS_CONFIRMED:'false'}),'license_required');

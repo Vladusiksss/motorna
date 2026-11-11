@@ -34,6 +34,11 @@ function upload(carId,content=png,type='image/png'){const form=new FormData();fo
 try{
  assert.equal((await records.GET()).headers.get('cache-control'),'private, no-store');
  assert.equal((await documents.GET()).headers.get('cache-control'),'private, no-store');
+ const duplicateVinPosts=await Promise.all(Array.from({length:5},()=>records.POST(json('api/records',{kind:'car',data:{...car,name:'Duplicate VIN attempt'}}))));
+ assert.ok(duplicateVinPosts.every(r=>r.status===201),'duplicate VIN submissions remain a successful idempotent save');
+ const duplicateVinRecords=await Promise.all(duplicateVinPosts.map(r=>r.json()));
+ assert.ok(duplicateVinRecords.every(r=>r.record.id===carA&&r.createdNew===false),'parallel duplicate VIN requests resolve to the existing owned car');
+ assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM records WHERE owner='owner-a' AND kind='car' AND json_extract(payload,'$.vin')=?").get(car.vin).n,1,'one car remains for the same VIN');
  // Oversized and malformed request bodies are rejected before writes, including dishonest headers.
  const initial=sqlite.prepare('SELECT COUNT(*) AS n FROM records').get().n;
  for(const method of ['POST','PATCH']){

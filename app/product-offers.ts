@@ -77,14 +77,21 @@ export function offerIdentity(url:string){const u=new URL(url);if(u.hostname==='
 export function matchesVehicle(title:string,vehicle:string,model:string){
  const words=(model||vehicle.split(' ').slice(1,2).join(' ')).toLowerCase().split(/\s+/).filter(w=>w.length>1&&!/^\d{4}$/.test(w));
  if(words.length&&!words.every(w=>title.toLowerCase().includes(w)))return false;
- // Do not substitute an explicitly different generation when the VIN source has no generation.
- if(words.length===1){const escaped=words[0].replace(/[.*+?^${}()|[\]\\]/g,'\\$&');const generation=title.match(new RegExp('\\b'+escaped+'\\s+(?:mk\\s*)?([ivx]{1,5}|[1-9])(?:\\s|[,(]|$)','i'));if(generation)return false;}
- // A platform explicitly advertised by a seller must also be present in vehicle data.
- const platforms=Array.from(title.matchAll(/(?:^|[\s(])([CcСсBbВв][3-9]|4[FGH]|8[KWT])(?=[\s),/]|$)/g)).map(m=>m[1].toUpperCase().replace(/С/g,'C').replace(/В/g,'B'));
- const vehicleCodes=vehicle.toUpperCase().replace(/С/g,'C').replace(/В/g,'B').split(/[^A-Z0-9]+/);
- if(platforms.length&&!platforms.some(code=>vehicleCodes.includes(code)))return false;
+ // Compare explicit platform/generation markers when either side supplies one.
+ const platformPattern=/(?:^|[\s(])([CcСсBbВв][3-9]|4[FGH]|8[KWT])(?=[\s),/]|$)/g;
+ const platforms=Array.from(title.matchAll(platformPattern),m=>m[1].toUpperCase().replace(/С/g,'C').replace(/В/g,'B'));
+ const vehicleCodes=Array.from(vehicle.toUpperCase().replace(/С/g,'C').replace(/В/g,'B').matchAll(platformPattern),m=>m[1].toUpperCase().replace(/С/g,'C').replace(/В/g,'B'));
+ if(platforms.length&&(!vehicleCodes.length||!platforms.some(code=>vehicleCodes.includes(code))))return false;
+ // Reject an explicitly incompatible model generation (e.g. A6 C5 for A6 C7).
+ if(words.length===1){
+  const escaped=words[0].replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const generationPattern=new RegExp('\\b'+escaped+'\\s+(?:mk\\s*)?([ivx]{1,5}|[1-9])(?:\\s|[,(]|$)','ig');
+  const advertised=Array.from(title.matchAll(generationPattern),m=>m[1].toUpperCase());
+  const expected=vehicle.match(new RegExp('\\b'+escaped+'\\s+(?:mk\\s*)?([ivx]{1,5}|[1-9])(?:\\s|[,(]|$)','i'))?.[1]?.toUpperCase();
+  if(advertised.length&&(!expected||!advertised.includes(expected)))return false;
+ }
  const year=Number(vehicle.match(/\b(?:19|20)\d{2}\b/)?.[0]);
- const litres=Number(vehicle.match(/\b([1-9][.,]\d)\s*л/i)?.[1]?.replace(',','.'));
+ const litres=Number(vehicle.match(/\b([1-9][.,]\d)\s*(?:л|l|tdi|tsi|tfsi|cdi|dci|hdi)(?![\p{L}\p{N}])/iu)?.[1]?.replace(',','.'));
  const engineRanges=Array.from(title.matchAll(/\b([1-9][.,]\d)\s*[-–]\s*([1-9][.,]\d)(?!\d)/g));
  if(litres&&engineRanges.length&&!engineRanges.some(r=>litres>=Number(r[1].replace(',','.'))&&litres<=Number(r[2].replace(',','.'))))return false;
  const titleDiesel=/\b(?:diesel|tdi|cdi|dci|hdi|td)\b|дизел/i.test(title),titlePetrol=/gasoline|petrol|бензин/i.test(title);
@@ -95,8 +102,16 @@ export function matchesVehicle(title:string,vehicle:string,model:string){
  const shortRanges=Array.from(title.matchAll(/\b(\d{2})\s*[-–]\s*(\d{2})(?:\b|г|р)/g));
  const full=(n:string)=>Number(n)>30?1900+Number(n):2000+Number(n);
  const openYears=Array.from(title.matchAll(/\b((?:19|20)\d{2}|\d{2})\s*[-–](?=\s*(?:[,)]|$))/g));
+ // A standalone model year is also a hard fitment constraint, not a hint.
+ const openYearValues=new Set(openYears.map(r=>r[1].length===4?Number(r[1]):full(r[1])));
+ const yearMentions=Array.from(title.matchAll(/\b((?:19|20)\d{2})\b/g),m=>Number(m[1])).filter(y=>!openYearValues.has(y));
+ if(year&&ranges.length===0&&yearMentions.length&&!yearMentions.includes(year))return false;
  if(year&&openYears.length&&!openYears.some(r=>year>=(r[1].length===4?Number(r[1]):full(r[1]))))return false;
  if(year&&!ranges.length&&shortRanges.length&&!shortRanges.some(r=>year>=full(r[1])&&year<=full(r[2])))return false;
+ // Explicit engine displacement / fuel family in the listing must agree with the car.
+ const vehicleLitres=vehicle.match(/\b([1-9][.,]\d)\s*(?:л|l|tdi|tsi|tfsi|cdi|dci|hdi)(?![\p{L}\p{N}])/iu)?.[1]?.replace(',','.');
+ const listingLitres=Array.from(title.matchAll(/\b([1-9][.,]\d)\s*(?:л|l|tdi|tsi|tfsi|cdi|dci|hdi)\b/gi),m=>m[1].replace(',','.'));
+ if(vehicleLitres&&listingLitres.length&&!listingLitres.includes(vehicleLitres))return false;
  return true;
 }
 

@@ -8,6 +8,6 @@ export async function partsIndexRequest(path:string,key=process.env.PARTS_INDEX_
  if(!r.ok)throw Error(r.status===401||r.status===403?'CATALOG_ACCESS_DENIED':r.status===429?'CATALOG_RATE_LIMIT':'CATALOG_UNAVAILABLE');
  return r.json();
 }
-export async function partsIndexCars(vin:string){if(!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin))throw Error('INVALID_VIN');const d=await partsIndexRequest('/v1/parts-by-vin/cars?'+new URLSearchParams({q:vin,lang:'ru'}));return z.object({list:z.array(car)}).parse(d).list;}
+export async function partsIndexCars(vin:string,key=process.env.PARTS_INDEX_API_KEY){if(!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin))throw Error('INVALID_VIN');const d=await partsIndexRequest('/v1/parts-by-vin/cars?'+new URLSearchParams({q:vin,lang:'ru'}),key);return z.object({list:z.array(car)}).parse(d).list;}
 export function parsePartsIndexResults(d:unknown){return z.object({status:z.enum(['pending','in_progress','success','failed']),partsBrand:z.object({id:z.string().optional(),name:z.string().optional()}).optional(),list:z.array(part).optional().default([])}).parse(d);}
-export async function partsIndexResults(carId:string){return parsePartsIndexResults(await partsIndexRequest('/v1/parts-by-vin/cars/'+encodeURIComponent(carId)+'/results?timeout=15000&lang=ru'));}
+export async function partsIndexResults(carId:string,key=process.env.PARTS_INDEX_API_KEY){return parsePartsIndexResults(await partsIndexRequest('/v1/parts-by-vin/cars/'+encodeURIComponent(carId)+'/results?timeout=15000&lang=ru',key));}

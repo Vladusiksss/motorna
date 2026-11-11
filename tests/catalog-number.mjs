@@ -17,6 +17,14 @@ assert.equal(extractOffers(html,'https://prom.ua/p123-test.html','059121111X','0
 
 const {matchesVehicle}=await import('../app/product-offers.ts');
 assert.equal(matchesVehicle('Колодки Audi A6 С5 VW Passat B5','AUDI A6 2014','A6'),false);
+assert.equal(matchesVehicle('Колодки Audi A6 2006','AUDI A6 2014','A6'),false,'standalone incompatible year is rejected');
+assert.equal(matchesVehicle('Колодки Audi A6 2011-2018','AUDI A6 2014','A6'),true,'compatible year range is accepted');
+assert.equal(matchesVehicle('Гальмівні колодки Audi A6 C5','AUDI A6 C7 2014','A6'),false,'incompatible platform/generation is rejected');
+assert.equal(matchesVehicle('Гальмівні колодки Audi A6 C7','AUDI A6 C7 2014','A6'),true,'matching platform/generation is accepted');
+assert.equal(matchesVehicle('Термостат Audi A6 1.9 TDI','AUDI A6 2.0 TDI','A6'),false,'incompatible engine modification is rejected');
+assert.equal(matchesVehicle('Термостат Audi A6 2.0 TDI','AUDI A6 2.0 TDI','A6'),true,'matching engine modification is accepted');
+assert.ok(matchesCatalogNumber({title:'Гальмівні колодки GDB3373 TRW'},'GDB3373'),'OEM in title matches without the requested part name');
+assert.ok(!matchesCatalogNumber({title:'Гальмівні колодки GDB33730 TRW'},'GDB3373'),'a longer, incorrect OEM is rejected');
 const {parseCatalogInput}=await import('../app/product-offers.ts');
 assert.deepEqual(parseCatalogInput('GDB3373 TRW'),{number:'GDB3373',brand:'TRW'});
 assert.ok(matchesCatalogNumber({title:'Колодки GDB3373 TRW'},'GDB3373 TRW'));

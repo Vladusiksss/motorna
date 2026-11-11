@@ -5,9 +5,7 @@ import {useEffect,useState,useRef} from 'react';
 import {ArrowUpRight,MapPin,Search,Clock,Phone} from 'lucide-react';
 
 import StationReviews from './station-reviews';
-import {SearchSession} from './vehicle-finder';
-
-export default function RepairSpace({latest}:{latest:SearchSession|null}){
+export default function RepairSpace(){
  const [routing,setRouting]=useState(false);
  const [radius,setRadius]=useState(8),[summaries,setSummaries]=useState<z.infer<typeof summarySchema>[]>([]);
  async function refreshReviews(){try{const r=await fetch('/api/station-reviews?summary=1');if(r.ok){const d=z.object({summaries:z.array(summarySchema)}).parse(await readApi(r));setSummaries(d.summaries);}}catch{}}

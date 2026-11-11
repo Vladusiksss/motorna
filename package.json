@@ -14,7 +14,7 @@
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit --incremental false",
     "test:offers": "node --experimental-strip-types tests/offer-filters.mjs",
-    "lint:strict": "eslint .",
+    "lint:strict": "eslint . --max-warnings=0",
     "test": "node scripts/test-regression.mjs",
     "test:api": "node tests/journey-api.mjs",
     "test:e2e": "playwright test",

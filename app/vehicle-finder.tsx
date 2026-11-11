@@ -1,5 +1,6 @@
 "use client";
 import Link from 'next/link';
+import {useRouter} from 'next/navigation';
 import {z} from 'zod';
 import {readApi,apiFailure,vehicleSchema,analysisSchema,linkSchema} from './api-contracts';
 import {errorMessage} from './record-types';
@@ -7,13 +8,13 @@ import type {RecordOf,SaveRecord} from './record-types';
 import {usePurchase} from './purchase-context';
 import OfferResults from './offer-results';
 import OemCatalog from './oem-catalog';
-import {useEffect,useRef,useState,useSyncExternalStore} from 'react';
-import {Search,CarFront,ArrowRight,ArrowUpRight,Check,Heart,Info,LoaderCircle,Wrench} from 'lucide-react';
+import {useEffect,useEffectEvent,useRef,useState,useSyncExternalStore} from 'react';
+import {Search,CarFront,ArrowRight,ArrowUpRight,Check,Info,LoaderCircle,Wrench} from 'lucide-react';
 import {Tabs,TabsList,TabsTrigger} from '@/components/ui/tabs';
 import {Skeleton} from '@/components/ui/skeleton';
 import {VehicleInfo,cleanIdentifier} from './vehicle-search';
 import {restoreVehicle} from './vehicle-resolution';
-import {searchIntent,routedSearchIntent,type SearchCommand} from './search-intent';
+import {routedSearchIntent,type SearchCommand} from './search-intent';
 import {repairQuery} from './media-search';
 import {RecordItem} from './data';
 export type LinkResult={title:string;url:string;host:string;price?:number;currency?:string;availability?:string;brand?:string;catalogNumbers?:string[];dataMode?:'live'|'demo';numberMatch?:boolean;checkedAt?:string;part?:string;fitment?:{status:string;reason:string}};
@@ -25,6 +26,7 @@ function pendingVehicle(){try{if(typeof sessionStorage==='undefined')return null
 const hydrationSubscription=()=>()=>{};
 export default function VehicleFinder(props:Props){const hydrated=useSyncExternalStore(hydrationSubscription,()=>true,()=>false);return hydrated?<FinderContent key={props.command?.id||'manual'} {...props}/>:<Skeleton className="h-16 w-full rounded-lg"/>;}
 function FinderContent({save,records,signedIn,initialCar,onSearch,command,onVehicleChange,onVinSearch,onConfirmed}:Props){
+ const router=useRouter();
  const intent=command?.text?routedSearchIntent(command.text,command.kind):null;
  const [resumed]=useState(pendingVehicle);
  const initialVehicle=resumed||(intent?.kind!=='vin'&&initialCar?fromCar(initialCar):null);
@@ -36,9 +38,8 @@ function FinderContent({save,records,signedIn,initialCar,onSearch,command,onVehi
  const partSearchAbort=useRef<AbortController|null>(null);
  const generation=useRef(0),analysisGeneration=useRef(0),resumeConfirm=useRef(!!resumed),analysisAbort=useRef<AbortController|null>(null);
  const [questionId,setQuestionId]=useState(''),[answerChoices,setAnswerChoices]=useState<string[]>([]);
- const [questions,setQuestions]=useState<string[]>([]),[dialogue,setDialogue]=useState<{role:'user'|'assistant';content:string}[]>([]),[reply,setReply]=useState('');
+ const [,setQuestions]=useState<string[]>([]),[dialogue,setDialogue]=useState<{role:'user'|'assistant';content:string}[]>([]),[reply,setReply]=useState('');
  useEffect(()=>{try{sessionStorage.removeItem('motorna-pending-car');}catch{}},[]);
- useEffect(()=>{if(signedIn&&vehicle&&resumeConfirm.current){resumeConfirm.current=false;void confirm();}},[signedIn,vehicle]);
  useEffect(()=>{onVehicleChange?.(vehicle);},[vehicle,onVehicleChange]);
  const label=vehicle?[vehicle.make,vehicle.model,vehicle.year,vehicle.engine].filter(Boolean).join(' '):'';
  useEffect(()=>()=>{generation.current++;analysisGeneration.current++;analysisAbort.current?.abort();partSearchAbort.current?.abort();},[]);
@@ -49,22 +50,24 @@ function FinderContent({save,records,signedIn,initialCar,onSearch,command,onVehi
    if(abort.signal.aborted)return;const decoded=z.object({vehicle:vehicleSchema}).parse(value).vehicle;const saved=records.filter(r=>r.kind==='car').find(r=>cleanIdentifier(r.data.vin)===cleanIdentifier(intent.text));const resolved=saved?restoreVehicle(decoded,fromCar(saved)):decoded;setVehicle(resolved);setManual(!!resolved.needsConfirmation||!resolved.make||!resolved.model||!resolved.year);setBusy(false);
   }).catch(e=>{if(!abort.signal.aborted){setError(errorMessage(e));setBusy(false);}});
   return()=>abort.abort();
- },[command?.id]);
+ },[command?.id,intent?.kind,intent?.text,onVinSearch,records]);
  useEffect(()=>{
   if(!pendingSearch||!confirmed||!carId||!vehicle)return;
   const abort=new AbortController();const wanted=[pendingSearch.part.trim()],catalogNumber=pendingSearch.oem.trim();
   fetchSearch(wanted,catalogNumber,carId,vehicle,label,'',abort.signal).then(({value,failures})=>{if(abort.signal.aborted)return;setPendingSearch(null);setSession(value);setResultError(failures.join(' · '));onSearch(value);if(signedIn)void save('searchHistory',value);}).catch(e=>{if(!abort.signal.aborted){setPendingSearch(null);setResultError(errorMessage(e));}});
   return()=>abort.abort();
- },[pendingSearch,confirmed,carId,vehicle]);
+ },[pendingSearch,confirmed,carId,vehicle,label,onSearch,save,signedIn]);
 
  async function decode(e?:React.FormEvent,vin?:string){e?.preventDefault();onVinSearch?.((vin||identifier).trim().toUpperCase().replace(/\s/g,''));const id=++generation.current;analysisGeneration.current++;setBusy(true);setError('');setVehicle(null);setManual(false);setConfirmed(false);setSession(null);setCauses([]);setSelected([]);setDialogue([]);setReply('');setQuestions([]);setQuestionId('');setAnswerChoices([]);setSearching(false);setAnalyzing(false);try{const r=await fetch('/api/vehicle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identifier:vin||identifier})});const d=z.object({vehicle:vehicleSchema}).parse(await readApi(r));if(id!==generation.current)return;const saved=records.filter(record=>record.kind==='car').find(record=>cleanIdentifier(String(record.data.vin||''))===cleanIdentifier(vin||identifier));const resolved=saved?restoreVehicle(d.vehicle,fromCar(saved)):d.vehicle;setVehicle(resolved);setManual(!!resolved.needsConfirmation||!resolved.make||!resolved.model||!resolved.year);}catch(e){if(id===generation.current)setError(errorMessage(e));}finally{if(id===generation.current)setBusy(false);}}
  async function confirm(){if(!vehicle)return;if(vehicle.needsConfirmation||!vehicle.make.trim()||!vehicle.model.trim()||!vehicle.year||Number(vehicle.year)<1950){setError('Уточніть відсутні дані автомобіля.');setManual(true);return;}setBusy(true);setError('');try{
   const existing=records.find(r=>r.kind==='car'&&(vehicle.vin?r.data.vin===vehicle.vin:r.data.name===`${vehicle.make} ${vehicle.model}`.trim()&&String(r.data.year)===vehicle.year&&r.data.engine===vehicle.engine));
   if(existing){setCarId(existing.id);setConfirmed(true);onConfirmed?.(existing.id);return;}
-  if(!signedIn){try{sessionStorage.setItem('motorna-pending-car',JSON.stringify({vehicle,at:Date.now()}));window.location.assign('/signin-with-chatgpt?return_to=/');}catch{setError('Дозвольте зберігання даних у браузері або увійдіть у кабінет.');}return;}
+  if(!signedIn){try{sessionStorage.setItem('motorna-pending-car',JSON.stringify({vehicle,at:Date.now()}));router.push('/signin-with-chatgpt?return_to=/');}catch{setError('Дозвольте зберігання даних у браузері або увійдіть у кабінет.');}return;}
   const result=await save('car',{name:`${vehicle.make} ${vehicle.model}`.trim().slice(0,120),make:vehicle.make,model:vehicle.model,year:Number(vehicle.year),engine:vehicle.engine.slice(0,80),vin:vehicle.vin,mileage:0,nextService:0,source:vehicle.source,specifications:vehicle.fields});
   if(result){setCarId(result.id);setConfirmed(true);onConfirmed?.(result.id);}else setError('Не вдалося зберегти авто. Повторіть підтвердження.');
  }catch{setError('Не вдалося підтвердити авто. Спробуйте ще раз.');}finally{setBusy(false);}}
+ const resumeConfirmAction=useEffectEvent(()=>{void confirm();});
+ useEffect(()=>{if(signedIn&&vehicle&&resumeConfirm.current){resumeConfirm.current=false;resumeConfirmAction();}},[signedIn,vehicle]);
  async function analyze(followup=false,quickAnswer?:string){const answer=(quickAnswer??reply).trim();if(followup&&!answer)return;const messages=followup?[...dialogue,{role:'user' as const,content:answer}]:[{role:'user' as const,content:problem}];analysisAbort.current?.abort();const controller=new AbortController();analysisAbort.current=controller;const id=++analysisGeneration.current;setAnalyzing(true);if(!followup){setQuestions([]);setCauses([]);setSelected([]);setAnalysisNote('');}try{const r=await fetch('/api/analyze',{signal:controller.signal,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vehicle:[label,...(vehicle?.fields||[]).filter(f=>/палив|fuel/i.test(f.label)).map(f=>f.value)].join(' ').slice(0,200),symptoms:problem,questionId:followup?questionId:undefined,history:messages.slice(1).slice(-20).map(m=>({...m,content:m.role==='assistant'?m.content.slice(-1000):m.content}))})});const d=analysisSchema.parse(await readApi(r));if(id!==analysisGeneration.current)return;setCauses(d.causes);setSelected(old=>old.filter(p=>d.causes.some((c:Cause)=>c.parts.includes(p))));setQuestions(d.questions||[]);setQuestionId(d.questionId||'');setAnswerChoices(d.choices||[]);setDialogue([...messages,{role:'assistant',content:[d.note,...(d.questions||[])].filter(Boolean).join('\n')}]);setReply('');setAnalysisNote('');}catch(e){if(id===analysisGeneration.current)setAnalysisNote(errorMessage(e));}finally{if(id===analysisGeneration.current)setAnalyzing(false);}}
  async function search(request?:{part:string;oem:string}){const direct=!!request||mode==='part';const wanted=direct?[(request?.part??part).trim()]:selected;const catalogNumber=direct?(request?.oem??oem).trim():'';if(!confirmed||!carId||!wanted.length||wanted.some(p=>p.length<2))return;partSearchAbort.current?.abort();const controller=new AbortController();partSearchAbort.current=controller;const id=++generation.current;setPendingSearch(null);setError('');setSearching(true);setSession(null);setResultError('');
   try{const {value,failures}=await fetchSearch(wanted,catalogNumber,carId,vehicle!,label,!direct?[problem,...dialogue.filter(m=>m.role==='user').slice(1).map(m=>m.content)].join(' · ').slice(0,1000):'',controller.signal);if(id!==generation.current)return;setSession(value);onSearch(value);if(failures.length)setResultError(failures.join(' · '));if(signedIn)await save('searchHistory',value);

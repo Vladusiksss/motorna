@@ -4,10 +4,13 @@ const defaults:Record<number,{code:string;message:string}>={
 function object(value:unknown):Record<string,unknown>{return value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};}
 // Every exported API handler runs inside this boundary. Never trust a caller-supplied request ID.
 export async function apiBoundary(task:()=>Promise<Response>,route:string,request?:Request):Promise<Response>{
- const requestId=crypto.randomUUID();let response:Response;
+ const startedAt=Date.now(),requestId=crypto.randomUUID();let response:Response;
  try{response=request?(await (await import('./rate-limit')).apiRateGuard(request,route))||await task():await task();if(!(response instanceof Response)||response.status<200)throw new Error('Invalid API response');}catch(error){response=dataConstraintFailure(error)||new Response(null,{status:500});}
  const headers=new Headers(response.headers);headers.set('X-Request-Id',requestId);
- if(response.status<400)return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
+ if(response.status<400){
+  console.info(JSON.stringify({event:'api_request_complete',requestId,route,method:request?.method||'INTERNAL',status:response.status,durationMs:Math.max(0,Date.now()-startedAt)}));
+  return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
+ }
  let source:Record<string,unknown>={};
  if(response.headers.get('Content-Type')?.includes('application/json')){try{source=object(await response.json());}catch{/* An invalid error body gets the safe status default. */}}
  else{void response.body?.cancel().catch(()=>{});}
@@ -20,7 +23,7 @@ export async function apiBoundary(task:()=>Promise<Response>,route:string,reques
  headers.delete('Content-Length');headers.delete('Content-Encoding');headers.delete('Content-Disposition');headers.delete('ETag');
  headers.set('Content-Type','application/json; charset=utf-8');
  headers.set('Cache-Control','private, no-store');headers.set('X-Content-Type-Options','nosniff');
- console.warn(JSON.stringify({event:'api_error',requestId,route,status:response.status,code}));
+ console.warn(JSON.stringify({event:'api_request_complete',requestId,route,method:request?.method||'INTERNAL',status:response.status,code,durationMs:Math.max(0,Date.now()-startedAt)}));
  return Response.json({code,message,requestId,...(details===undefined?{}:{details})},{status:response.status,headers});
 }
 

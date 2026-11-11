@@ -38,6 +38,6 @@ console.log('PASS: brand separated, exact article, translated titles, observed p
 
 const malformed='<script type="application/ld+json">'+JSON.stringify({'@type':'Product',name:'Термостат',brand:123,additionalProperty:[null,42,{name:'OEM',value:{bad:true}}],offers:[null,{'@type':'Offer',url:{bad:true},price:99,priceCurrency:'UAH'}]})+'</script>';
 assert.doesNotThrow(()=>extractOffers(malformed,'https://prom.ua/p123-test.html','Термостат'));
-assert.equal(extractOffers(malformed,'https://prom.ua/p123-test.html','Термостат').length,0);
+assert.equal(extractOffers(malformed,'https://prom.ua/p123-test.html','Термостат').length,1,'a real product page remains visible with no price even when optional markup is malformed');
 assert.deepEqual(extractOffers('<script type="application/ld+json">[null,42]</script>','https://prom.ua/p123-test.html','Термостат'),[]);
 console.log('PASS: malformed JSON-LD properties and URLs rejected without crashing');
